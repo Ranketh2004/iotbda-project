@@ -1,0 +1,11 @@
+fastapi>=0.110.0
+uvicorn[standard]
+librosa
+numpy<2.0.0
+tensorflow>=2.15.0
+soundfile
+python-multipart
+websockets
+motor>=3.3.0
+pymongo>=4.6.0
+certifi
