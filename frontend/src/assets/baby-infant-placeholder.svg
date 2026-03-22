@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="bibg" x1="6%" y1="4%" x2="94%" y2="96%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="40%" stop-color="#f0f9ff"/>
+      <stop offset="72%" stop-color="#fdf2f8"/>
+      <stop offset="100%" stop-color="#e0f2fe"/>
+    </linearGradient>
+    <radialGradient id="biglow" cx="24%" cy="20%" r="52%">
+      <stop offset="0%" stop-color="#f9a8d4" stop-opacity="0.55"/>
+      <stop offset="45%" stop-color="#e9d5ff" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#f8fafc" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="biglass" x1="10%" y1="8%" x2="10%" y2="55%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="38" fill="url(#bibg)"/>
+  <rect width="128" height="128" rx="38" fill="url(#biglow)"/>
+  <rect x="10" y="10" width="108" height="58" rx="28" fill="url(#biglass)"/>
+  <path
+    d="M36 74 Q64 100 92 74"
+    stroke="#db2777"
+    stroke-width="8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
