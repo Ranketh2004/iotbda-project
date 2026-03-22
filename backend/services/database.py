@@ -1,5 +1,7 @@
 import logging
+import re
 import certifi
+from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import settings
 
@@ -31,6 +33,8 @@ class Database:
             # Create indexes for efficient queries
             await self.db.sensor_data.create_index("timestamp", unique=False)
             await self.db.notifications.create_index("timestamp", unique=False)
+            await self.db.users.create_index("email", unique=True)
+            await self.db.users.create_index("phone", unique=True, sparse=True)
             logger.info("MongoDB indexes created.")
         except Exception as e:
             print(f"MongoDB connection failed: {e}")
@@ -119,6 +123,98 @@ class Database:
             doc["_id"] = str(doc["_id"])
             doc.pop("_type", None)
         return doc
+
+    # ── Users (parent accounts) ─────────────────────────────
+
+    @staticmethod
+    def normalize_email(email: str) -> str:
+        return (email or "").strip().lower()
+
+    @staticmethod
+    def normalize_phone(phone: str) -> str | None:
+        if not phone or not str(phone).strip():
+            return None
+        digits = re.sub(r"\D", "", str(phone).strip())
+        return digits or None
+
+    async def insert_user(self, user_doc: dict) -> str:
+        user_doc["created_at"] = datetime.now(timezone.utc)
+        result = await self.db.users.insert_one(user_doc)
+        return str(result.inserted_id)
+
+    async def find_user_by_email(self, email: str) -> dict | None:
+        key = self.normalize_email(email)
+        if not key:
+            return None
+        doc = await self.db.users.find_one({"email": key})
+        if doc:
+            doc["_id"] = str(doc["_id"])
+        return doc
+
+    async def find_user_by_phone(self, phone: str) -> dict | None:
+        key = self.normalize_phone(phone)
+        if not key:
+            return None
+        doc = await self.db.users.find_one({"phone": key})
+        if doc:
+            doc["_id"] = str(doc["_id"])
+        return doc
+
+    async def find_user_by_login_identifier(self, identifier: str) -> dict | None:
+        """Match login field labeled 'email' that may be an email address or phone number."""
+        raw = (identifier or "").strip()
+        if not raw:
+            return None
+        by_email = await self.find_user_by_email(raw)
+        if by_email:
+            return by_email
+        return await self.find_user_by_phone(raw)
+
+    async def get_user_by_id(self, user_id: str) -> dict | None:
+        from bson import ObjectId
+
+        try:
+            oid = ObjectId(user_id)
+        except Exception:
+            return None
+        doc = await self.db.users.find_one({"_id": oid})
+        if doc:
+            doc["_id"] = str(doc["_id"])
+        return doc
+
+    async def update_user_by_id(self, user_id: str, updates: dict) -> bool:
+        from bson import ObjectId
+
+        try:
+            oid = ObjectId(user_id)
+        except Exception:
+            return False
+        if not updates:
+            return True
+        r = await self.db.users.update_one({"_id": oid}, {"$set": updates})
+        return r.matched_count > 0
+
+    async def patch_user(
+        self,
+        user_id: str,
+        set_fields: dict | None = None,
+        unset_fields: list[str] | None = None,
+    ) -> bool:
+        from bson import ObjectId
+
+        try:
+            oid = ObjectId(user_id)
+        except Exception:
+            return False
+        cmd: dict = {}
+        if set_fields:
+            cmd["$set"] = set_fields
+        if unset_fields:
+            cmd["$unset"] = {k: "" for k in unset_fields}
+        if not cmd:
+            return True
+        r = await self.db.users.update_one({"_id": oid}, cmd)
+        return r.matched_count > 0
 
 
 # Singleton

@@ -15,6 +15,7 @@ class Settings:
     # Paths
     BASE_DIR: str = BASE_DIR
     MODEL_PATH: str = os.path.join(BASE_DIR, "models", "baby_cry_model.h5")
+    UPLOAD_DIR: str = os.path.join(BASE_DIR, "uploads")
 
     # Audio constants
     SAMPLE_RATE: int = 16000
@@ -24,6 +25,11 @@ class Settings:
     # MongoDB
     MONGO_URI: str = os.getenv("MONGO_URI", "")
     MONGO_DB_NAME: str = os.getenv("MONGO_DB_NAME", "cryguard")
+
+    # Auth (JWT)
+    JWT_SECRET: str = os.getenv("JWT_SECRET", "change-me-in-production-use-long-random-string")
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days
 
     def validate(self):
         if not self.MONGO_URI:
