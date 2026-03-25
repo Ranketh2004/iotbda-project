@@ -1,6 +1,6 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Bell, User } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Bell, LogOut, User } from 'lucide-react';
 import BrandLogoMark from './BrandLogoMark';
 
 const BRAND = 'Infant Cry Guard';
@@ -20,7 +20,29 @@ function linkActive(path, to) {
 
 export default function DashboardHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
   const path = location.pathname;
+
+  const handleLogout = () => {
+    localStorage.removeItem('cryguard_token');
+    localStorage.removeItem('cryguard_user');
+    navigate('/login', { replace: true });
+  };
+
+  const storedUser = React.useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('cryguard_user') || 'null');
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const displayName = React.useMemo(() => {
+    if (!storedUser) return '';
+    if (storedUser.fullName) return storedUser.fullName;
+    const email = storedUser.email || '';
+    return email.includes('@') ? email.split('@')[0] : email;
+  }, [storedUser]);
 
   return (
     <header className="dash-header">
@@ -41,6 +63,9 @@ export default function DashboardHeader() {
           ))}
         </nav>
         <div className="dash-header-tools">
+          {displayName && (
+            <span className="dash-user-name">{displayName}</span>
+          )}
           <Link
             to="/dashboard/notifications"
             className={`dash-icon-btn ${path.startsWith('/dashboard/notifications') ? 'dash-icon-btn--active' : ''}`}
@@ -57,6 +82,15 @@ export default function DashboardHeader() {
           >
             <User size={20} strokeWidth={2.1} />
           </Link>
+          <button
+            type="button"
+            className="dash-icon-btn"
+            aria-label="Logout"
+            onClick={handleLogout}
+            title="Logout"
+          >
+            <LogOut size={20} />
+          </button>
         </div>
       </div>
     </header>

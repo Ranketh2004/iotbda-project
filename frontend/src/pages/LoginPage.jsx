@@ -204,7 +204,14 @@ export default function LoginPage() {
           </div>
 
           <div className="login-social">
-            <button type="button" className="login-social-btn" aria-label="Continue with Google">
+            <button
+              type="button"
+              className="login-social-btn"
+              aria-label="Continue with Google"
+              onClick={() => {
+                window.location.href = '/api/auth/google/login';
+              }}
+            >
               <GoogleIcon />
               Google
             </button>

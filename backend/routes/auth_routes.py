@@ -1,10 +1,14 @@
 import hashlib
 import logging
+import secrets
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
+import httpx
 import jwt
 from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile, status
+from fastapi.responses import RedirectResponse
 from jwt.exceptions import PyJWTError
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, TypeAdapter, ValidationError
 
@@ -458,3 +462,113 @@ async def read_me(authorization: str | None = Header(None)):
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return _user_to_public(doc)
+
+
+# ── Google OAuth ─────────────────────────────────────────
+
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
+
+# In-memory store for state ↔ nonce (short-lived; fine for single-instance dev)
+_google_oauth_states: dict[str, float] = {}
+
+
+@router.get("/google/login")
+async def google_login():
+    """Redirect browser to Google consent screen."""
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Google OAuth is not configured.")
+
+    state = secrets.token_urlsafe(32)
+    _google_oauth_states[state] = datetime.now(timezone.utc).timestamp()
+
+    params = {
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "redirect_uri": settings.GOOGLE_REDIRECT_URI + "/api/auth/google/callback",
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "state": state,
+        "prompt": "consent",
+    }
+    url = f"{GOOGLE_AUTH_URL}?{urllib.parse.urlencode(params)}"
+    return RedirectResponse(url)
+
+
+@router.get("/google/callback")
+async def google_callback(code: str = "", state: str = ""):
+    """Exchange Google auth code for tokens, create/find user, redirect with JWT."""
+    # Validate state to prevent CSRF
+    if not state or state not in _google_oauth_states:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state.")
+    del _google_oauth_states[state]
+
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing authorization code.")
+
+    # Exchange code for tokens
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(
+            GOOGLE_TOKEN_URL,
+            data={
+                "code": code,
+                "client_id": settings.GOOGLE_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                "redirect_uri": settings.GOOGLE_REDIRECT_URI + "/api/auth/google/callback",
+                "grant_type": "authorization_code",
+            },
+        )
+    if token_resp.status_code != 200:
+        logger.error("Google token exchange failed: %s", token_resp.text)
+        raise HTTPException(status_code=400, detail="Failed to obtain Google tokens.")
+
+    tokens = token_resp.json()
+    access_token_google = tokens.get("access_token")
+    if not access_token_google:
+        raise HTTPException(status_code=400, detail="No access token from Google.")
+
+    # Fetch user info
+    async with httpx.AsyncClient() as client:
+        info_resp = await client.get(
+            GOOGLE_USERINFO_URL,
+            headers={"Authorization": f"Bearer {access_token_google}"},
+        )
+    if info_resp.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to fetch Google user info.")
+
+    ginfo = info_resp.json()
+    google_email = (ginfo.get("email") or "").strip().lower()
+    google_name = ginfo.get("name") or google_email.split("@")[0]
+    google_picture = ginfo.get("picture") or ""
+
+    if not google_email:
+        raise HTTPException(status_code=400, detail="Google account has no email.")
+
+    # Find or create the user
+    user = await database.find_user_by_email(google_email)
+    if not user:
+        user_doc = {
+            "email": google_email,
+            "password_hash": "",  # no password for Google-only accounts
+            "full_name": google_name,
+            "mother": {"name": google_name, "phone": "", "email": google_email},
+            "father": {"name": "", "phone": "", "email": ""},
+            "photos": {"parent": google_picture} if google_picture else {},
+            "baby": {"name": "", "age_band": "0-3", "gender": "other"},
+            "guardians": [],
+            "google_sub": ginfo.get("sub", ""),
+        }
+        user_id = await database.insert_user(user_doc)
+        user_doc["_id"] = user_id
+        user = user_doc
+    else:
+        # Optionally update google_sub if not set
+        if not user.get("google_sub"):
+            await database.update_user_by_id(user["_id"], {"google_sub": ginfo.get("sub", "")})
+
+    app_token = create_access_token(user["_id"])
+
+    # Redirect back to frontend with token in query param
+    redirect_url = f"{settings.GOOGLE_REDIRECT_URI}/auth/google/callback?token={urllib.parse.quote(app_token)}&user={urllib.parse.quote(user['_id'])}"
+    return RedirectResponse(redirect_url)
