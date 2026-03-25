@@ -12,6 +12,8 @@ import AlertSettingsPage from './pages/AlertSettingsPage';
 import ProfilePage from './pages/ProfilePage';
 import AlertEscalationPage from './pages/AlertEscalationPage';
 import GoogleCallbackPage from './pages/GoogleCallbackPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 export default function App() {
   return (
@@ -19,6 +21,8 @@ export default function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
       <Route path="/dashboard" element={<DashboardPage />}>
         <Route index element={<DashboardHome />} />

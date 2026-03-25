@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, TypeAdapter, Valida
 
 from config import settings
 from services.database import database
+from services.email_service import send_reset_email
 from services.user_uploads import save_user_profile_image
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -453,6 +454,74 @@ async def login(body: LoginRequest):
 
     token = create_access_token(user["_id"])
     return TokenResponse(access_token=token, user=_user_to_public(user))
+
+
+# ── Forgot / Reset Password ─────────────────────────────
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=1)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+    password_confirm: str = Field(..., min_length=1)
+
+
+# In-memory reset tokens: token → {user_id, expires}
+_reset_tokens: dict[str, dict] = {}
+RESET_TOKEN_EXPIRE_MINUTES = 15
+
+
+@router.post("/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest):
+    """Generate a password reset token and send it via email."""
+    email_norm = database.normalize_email(body.email)
+    user = await database.find_user_by_email(email_norm)
+    # Always return success to avoid leaking whether email exists
+    if not user:
+        return {"message": "If that email is registered, a reset link has been sent."}
+
+    # Google-only accounts have no password to reset
+    if not user.get("password_hash"):
+        return {"message": "If that email is registered, a reset link has been sent."}
+
+    token = secrets.token_urlsafe(32)
+    _reset_tokens[token] = {
+        "user_id": user["_id"],
+        "expires": datetime.now(timezone.utc) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
+    }
+    logger.info("Password reset token for %s: %s", email_norm, token)
+
+    reset_link = f"{settings.GOOGLE_REDIRECT_URI}/reset-password?token={urllib.parse.quote(token)}"
+    email_sent = send_reset_email(email_norm, reset_link)
+
+    return {
+        "message": "If that email is registered, a reset link has been sent.",
+        "email_sent": email_sent,
+    }
+
+
+@router.post("/reset-password")
+async def reset_password(body: ResetPasswordRequest):
+    """Reset user password using a valid reset token."""
+    entry = _reset_tokens.get(body.token)
+    if not entry:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
+    if datetime.now(timezone.utc) > entry["expires"]:
+        del _reset_tokens[body.token]
+        raise HTTPException(status_code=400, detail="Reset token has expired.")
+
+    if body.password != body.password_confirm:
+        raise HTTPException(status_code=400, detail="Passwords do not match.")
+
+    new_hash = hash_password(body.password)
+    ok = await database.update_user_by_id(entry["user_id"], {"password_hash": new_hash})
+    if not ok:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    del _reset_tokens[body.token]
+    return {"message": "Password has been reset successfully. You can now log in."}
 
 
 @router.get("/me", response_model=UserPublic)

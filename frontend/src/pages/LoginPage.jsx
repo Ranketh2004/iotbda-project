@@ -165,9 +165,9 @@ export default function LoginPage() {
                 <label className="login-label" htmlFor="cryguard-login-password">
                   Password
                 </label>
-                <a href="#forgot" className="login-forgot">
+                <Link to="/forgot-password" className="login-forgot">
                   Forgot password?
-                </a>
+                </Link>
               </div>
               <div className="login-password-wrap">
                 <input
