@@ -1,15 +1,20 @@
 import hashlib
 import logging
+import secrets
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
+import httpx
 import jwt
 from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile, status
+from fastapi.responses import RedirectResponse
 from jwt.exceptions import PyJWTError
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, TypeAdapter, ValidationError
 
 from config import settings
 from services.database import database
+from services.email_service import send_reset_email
 from services.user_uploads import save_user_profile_image
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -451,6 +456,74 @@ async def login(body: LoginRequest):
     return TokenResponse(access_token=token, user=_user_to_public(user))
 
 
+# ── Forgot / Reset Password ─────────────────────────────
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=1)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+    password_confirm: str = Field(..., min_length=1)
+
+
+# In-memory reset tokens: token → {user_id, expires}
+_reset_tokens: dict[str, dict] = {}
+RESET_TOKEN_EXPIRE_MINUTES = 15
+
+
+@router.post("/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest):
+    """Generate a password reset token and send it via email."""
+    email_norm = database.normalize_email(body.email)
+    user = await database.find_user_by_email(email_norm)
+    # Always return success to avoid leaking whether email exists
+    if not user:
+        return {"message": "If that email is registered, a reset link has been sent."}
+
+    # Google-only accounts have no password to reset
+    if not user.get("password_hash"):
+        return {"message": "If that email is registered, a reset link has been sent."}
+
+    token = secrets.token_urlsafe(32)
+    _reset_tokens[token] = {
+        "user_id": user["_id"],
+        "expires": datetime.now(timezone.utc) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
+    }
+    logger.info("Password reset token for %s: %s", email_norm, token)
+
+    reset_link = f"{settings.GOOGLE_REDIRECT_URI}/reset-password?token={urllib.parse.quote(token)}"
+    email_sent = send_reset_email(email_norm, reset_link)
+
+    return {
+        "message": "If that email is registered, a reset link has been sent.",
+        "email_sent": email_sent,
+    }
+
+
+@router.post("/reset-password")
+async def reset_password(body: ResetPasswordRequest):
+    """Reset user password using a valid reset token."""
+    entry = _reset_tokens.get(body.token)
+    if not entry:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
+    if datetime.now(timezone.utc) > entry["expires"]:
+        del _reset_tokens[body.token]
+        raise HTTPException(status_code=400, detail="Reset token has expired.")
+
+    if body.password != body.password_confirm:
+        raise HTTPException(status_code=400, detail="Passwords do not match.")
+
+    new_hash = hash_password(body.password)
+    ok = await database.update_user_by_id(entry["user_id"], {"password_hash": new_hash})
+    if not ok:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    del _reset_tokens[body.token]
+    return {"message": "Password has been reset successfully. You can now log in."}
+
+
 @router.get("/me", response_model=UserPublic)
 async def read_me(authorization: str | None = Header(None)):
     uid = _decode_bearer_user_id(authorization)
@@ -458,3 +531,113 @@ async def read_me(authorization: str | None = Header(None)):
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return _user_to_public(doc)
+
+
+# ── Google OAuth ─────────────────────────────────────────
+
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
+
+# In-memory store for state ↔ nonce (short-lived; fine for single-instance dev)
+_google_oauth_states: dict[str, float] = {}
+
+
+@router.get("/google/login")
+async def google_login():
+    """Redirect browser to Google consent screen."""
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Google OAuth is not configured.")
+
+    state = secrets.token_urlsafe(32)
+    _google_oauth_states[state] = datetime.now(timezone.utc).timestamp()
+
+    params = {
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "redirect_uri": settings.GOOGLE_REDIRECT_URI + "/api/auth/google/callback",
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "state": state,
+        "prompt": "consent",
+    }
+    url = f"{GOOGLE_AUTH_URL}?{urllib.parse.urlencode(params)}"
+    return RedirectResponse(url)
+
+
+@router.get("/google/callback")
+async def google_callback(code: str = "", state: str = ""):
+    """Exchange Google auth code for tokens, create/find user, redirect with JWT."""
+    # Validate state to prevent CSRF
+    if not state or state not in _google_oauth_states:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state.")
+    del _google_oauth_states[state]
+
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing authorization code.")
+
+    # Exchange code for tokens
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(
+            GOOGLE_TOKEN_URL,
+            data={
+                "code": code,
+                "client_id": settings.GOOGLE_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                "redirect_uri": settings.GOOGLE_REDIRECT_URI + "/api/auth/google/callback",
+                "grant_type": "authorization_code",
+            },
+        )
+    if token_resp.status_code != 200:
+        logger.error("Google token exchange failed: %s", token_resp.text)
+        raise HTTPException(status_code=400, detail="Failed to obtain Google tokens.")
+
+    tokens = token_resp.json()
+    access_token_google = tokens.get("access_token")
+    if not access_token_google:
+        raise HTTPException(status_code=400, detail="No access token from Google.")
+
+    # Fetch user info
+    async with httpx.AsyncClient() as client:
+        info_resp = await client.get(
+            GOOGLE_USERINFO_URL,
+            headers={"Authorization": f"Bearer {access_token_google}"},
+        )
+    if info_resp.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to fetch Google user info.")
+
+    ginfo = info_resp.json()
+    google_email = (ginfo.get("email") or "").strip().lower()
+    google_name = ginfo.get("name") or google_email.split("@")[0]
+    google_picture = ginfo.get("picture") or ""
+
+    if not google_email:
+        raise HTTPException(status_code=400, detail="Google account has no email.")
+
+    # Find or create the user
+    user = await database.find_user_by_email(google_email)
+    if not user:
+        user_doc = {
+            "email": google_email,
+            "password_hash": "",  # no password for Google-only accounts
+            "full_name": google_name,
+            "mother": {"name": google_name, "phone": "", "email": google_email},
+            "father": {"name": "", "phone": "", "email": ""},
+            "photos": {"parent": google_picture} if google_picture else {},
+            "baby": {"name": "", "age_band": "0-3", "gender": "other"},
+            "guardians": [],
+            "google_sub": ginfo.get("sub", ""),
+        }
+        user_id = await database.insert_user(user_doc)
+        user_doc["_id"] = user_id
+        user = user_doc
+    else:
+        # Optionally update google_sub if not set
+        if not user.get("google_sub"):
+            await database.update_user_by_id(user["_id"], {"google_sub": ginfo.get("sub", "")})
+
+    app_token = create_access_token(user["_id"])
+
+    # Redirect back to frontend with token in query param
+    redirect_url = f"{settings.GOOGLE_REDIRECT_URI}/auth/google/callback?token={urllib.parse.quote(app_token)}&user={urllib.parse.quote(user['_id'])}"
+    return RedirectResponse(redirect_url)
