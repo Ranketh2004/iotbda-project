@@ -1667,7 +1667,16 @@ body {
 
 .dash-header-tools {
   display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+.dash-user-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #be185d;
+  white-space: nowrap;
+  margin-right: 4px;
 }
 
 .dash-icon-btn {

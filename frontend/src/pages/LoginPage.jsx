@@ -165,9 +165,9 @@ export default function LoginPage() {
                 <label className="login-label" htmlFor="cryguard-login-password">
                   Password
                 </label>
-                <a href="#forgot" className="login-forgot">
+                <Link to="/forgot-password" className="login-forgot">
                   Forgot password?
-                </a>
+                </Link>
               </div>
               <div className="login-password-wrap">
                 <input
@@ -204,7 +204,14 @@ export default function LoginPage() {
           </div>
 
           <div className="login-social">
-            <button type="button" className="login-social-btn" aria-label="Continue with Google">
+            <button
+              type="button"
+              className="login-social-btn"
+              aria-label="Continue with Google"
+              onClick={() => {
+                window.location.href = '/api/auth/google/login';
+              }}
+            >
               <GoogleIcon />
               Google
             </button>
