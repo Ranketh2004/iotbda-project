@@ -1,61 +1,34 @@
-touch dummy.txt
-
-messages=(
-"Initialize authentication module structure"
-"Setup login UI layout"
-"Setup signup page UI components"
-"Create user schema in backend"
-"Implement user registration endpoint"
-"Implement login API endpoint"
-"Add password hashing for security"
-"Setup JWT authentication logic"
-"Integrate login frontend with backend"
-"Integrate signup frontend with backend"
-"Add form validation for signup"
-"Add form validation for login"
-"Create profile page UI"
-"Implement user profile API"
-"Connect profile page with backend data"
-"Add update profile functionality"
-"Handle authentication errors gracefully"
-"Improve UI/UX for login and signup"
-"Refactor authentication service logic"
-"Add token storage and session handling"
-"Implement logout functionality"
-"Add protected routes handling"
-"Enhance authentication security checks"
-"Fix bugs in login flow"
-"Fix issues in signup validation"
-"Improve profile data handling"
-"Optimize API calls for auth module"
-"Add loading states for auth actions"
-"Refactor frontend auth components"
-"Refactor backend auth controllers"
-"Cleanup unused auth code"
-"Improve error messages for users"
-"Finalize authentication and user management"
-"Enhance integration between frontend and backend"
-)
-
-commit_with_date () {
-  DATE=$1
-  COUNT=$2
-  for ((i=0;i<$COUNT;i++))
-  do
-    echo "// auth update $RANDOM" >> dummy.txt
-
-    HOUR=$((10 + RANDOM % 10))
-    MIN=$((RANDOM % 60))
-
-    MSG=${messages[$RANDOM % ${#messages[@]}]}
-
-    GIT_AUTHOR_DATE="$DATE $HOUR:$MIN:00" \
-    GIT_COMMITTER_DATE="$DATE $HOUR:$MIN:00" \
-    git add . && git commit -m "$MSG"
-  done
-}
-
-# 34 commits split
-commit_with_date "2026-03-18" 12
-commit_with_date "2026-03-19" 12
-commit_with_date "2026-03-22" 10
+// update 1581694961
+// update 402959616
+// update 1663364102
+// update 1630034520
+// update 612496903
+// update 32660407
+// update 583818139
+// update 1478573415
+// update 644352319
+// update 1663641562
+// update 1747184191
+// update 1551199240
+// update 1388551422
+// update 271373598
+// update 700221236
+// update 987169553
+// update 962357938
+// update 1651126470
+// update 1835169293
+// update 1099427556
+// update 1780655045
+// update 149604292
+// update 1642720092
+// update 891591138
+// update 1395305677
+// update 1360255336
+// update 2089125632
+// update 1227718183
+// update 1774046668
+// update 88454978
+// update 735785243
+// update 604087478
+// update 1400014395
+// update 1847970328
