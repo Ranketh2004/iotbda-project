@@ -14,13 +14,14 @@ class Settings:
 
     # Paths
     BASE_DIR: str = BASE_DIR
-    MODEL_PATH: str = os.path.join(BASE_DIR, "models", "baby_cry_model.h5")
+    MODEL_PATH: str = os.path.join(BASE_DIR, "models", "cnn_lstm.keras")
     UPLOAD_DIR: str = os.path.join(BASE_DIR, "uploads")
 
     # Audio constants
     SAMPLE_RATE: int = 16000
-    MEL_BINS: int = 128
+    MEL_BINS: int = 40
     MAX_FREQ: int = 8000
+    EXPECTED_FRAMES=313
 
     # MongoDB
     MONGO_URI: str = os.getenv("MONGO_URI", "")

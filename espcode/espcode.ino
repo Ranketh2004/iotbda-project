@@ -9,7 +9,7 @@ const char* WIFI_SSID     = "Dialog 4G 018";
 const char* WIFI_PASSWORD = "917b765B";
 
 // ======================== Server Config ======================
-const char* SERVER_HOST      = "192.168.8.179";  
+const char* SERVER_HOST      = "192.168.8.183";  
 const int   SERVER_PORT      = 8080;
 const char* SENSOR_ENDPOINT  = "/api/sensor-data";
 const char* AUDIO_ENDPOINT   = "/api/audio";
@@ -35,7 +35,7 @@ DHT dht(DPIN, DTYPE);
 #define CHANNELS          1
 #define I2S_READ_SAMPLES  512
 #define I2S_READ_BYTES    (I2S_READ_SAMPLES * (SAMPLE_BITS / 8))
-#define AUDIO_SEND_SECONDS 7
+#define AUDIO_SEND_SECONDS 5
 #define AUDIO_CHUNK_BYTES (SAMPLE_RATE * (SAMPLE_BITS / 8) * AUDIO_SEND_SECONDS)
 #define WAV_HEADER_SIZE   44
 

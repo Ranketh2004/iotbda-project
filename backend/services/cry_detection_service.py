@@ -22,6 +22,7 @@ class CryDetectionService:
     def __init__(self):
         self.model = None
         self.load_model()
+        self.class_names = ['belly pain', 'burping', 'cold_hot', 'discomfort', 'hungry', 'tired']
 
     def load_model(self):
         """
@@ -50,14 +51,15 @@ class CryDetectionService:
 
         try:
             # Predict
-            predictions = self.model.predict(audio_features)
+            pred_probs = self.model.predict(audio_features)
+            logger.info(f"Model prediction probabilities: {pred_probs}")
+
+            prediction = np.argmax(pred_probs)
+            predicted_label = self.class_names[prediction] if prediction < len(self.class_names) else "unknown"
+            logger.info(f"Predicted class: {predicted_label} (index {prediction})")
+
+            return predicted_label
             
-            # Assuming binary classification where output > 0.5 means crying
-            # If the model has different output shape or activation, adjust accordingly.
-            probability = predictions[0][0] if predictions.ndim > 1 else predictions[0]
-            logger.info(f"Model prediction probability: {probability:.4f}")
-            
-            return probability > 0.5
         except Exception as e:
             logger.error(f"Error during model prediction: {str(e)}")
             return False

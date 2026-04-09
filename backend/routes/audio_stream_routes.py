@@ -23,7 +23,7 @@ esp_audio_connected: bool = False
 SAMPLE_RATE = 16000
 SAMPLE_BITS = 16
 CHANNELS = 1
-CRY_DETECT_SECONDS = 3
+CRY_DETECT_SECONDS = 5
 CRY_DETECT_BYTES = SAMPLE_RATE * (SAMPLE_BITS // 8) * CRY_DETECT_SECONDS  # 96000 bytes
 WAV_HEADER_SIZE = 44
 MIN_DETECT_INTERVAL = 2.0  # seconds between detections to avoid spam
@@ -52,7 +52,9 @@ async def run_cry_detection(pcm_data: bytes):
         # Preprocess and detect (run in thread to not block event loop)
         loop = asyncio.get_event_loop()
         features = await loop.run_in_executor(None, preprocess_audio, wav_bytes)
-        is_crying = await loop.run_in_executor(None, cry_service.detect_cry, features)
+        prediction = await loop.run_in_executor(None, cry_service.detect_cry, features)
+
+        is_crying = True if prediction in ['belly pain', 'burping', 'cold_hot', 'discomfort', 'hungry', 'laugh', 'noise', 'silence', 'tired'] else False
 
         result = {
             "cry_detected": bool(is_crying),
