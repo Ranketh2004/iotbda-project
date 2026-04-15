@@ -21,7 +21,13 @@ class Settings:
     SAMPLE_RATE: int = 16000
     MEL_BINS: int = 40
     MAX_FREQ: int = 8000
-    EXPECTED_FRAMES=313
+    EXPECTED_FRAMES = 313
+    # Binary cry model: probability above this counts as crying (sigmoid output)
+    CRY_PROBABILITY_THRESHOLD: float = float(os.getenv("CRY_PROBABILITY_THRESHOLD", "0.5"))
+    # Skip neural net when waveform RMS is below this (silence / line noise); librosa float audio in [-1, 1]
+    MIN_AUDIO_RMS: float = float(os.getenv("MIN_AUDIO_RMS", "0.012"))
+    # Multi-class softmax: require top class this confident (reduces false cries on ambiguous input)
+    CRY_MULTICLASS_MIN_CONFIDENCE: float = float(os.getenv("CRY_MULTICLASS_MIN_CONFIDENCE", "0.58"))
 
     # MongoDB
     MONGO_URI: str = os.getenv("MONGO_URI", "")

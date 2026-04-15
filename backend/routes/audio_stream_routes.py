@@ -6,6 +6,7 @@ import time
 import json
 from typing import List
 
+from config import settings
 from utils.audio_processing import preprocess_audio
 from services.cry_detection_service import cry_service
 from services.state_manager import state_manager
@@ -51,16 +52,21 @@ async def run_cry_detection(pcm_data: bytes):
 
         # Preprocess and detect (run in thread to not block event loop)
         loop = asyncio.get_event_loop()
-        features = await loop.run_in_executor(None, preprocess_audio, wav_bytes)
-        prediction = await loop.run_in_executor(None, cry_service.detect_cry, features)
-
-        is_crying = True if prediction in ['belly pain', 'burping', 'cold_hot', 'discomfort', 'hungry', 'laugh', 'noise', 'silence', 'tired'] else False
+        features, audio_rms = await loop.run_in_executor(None, preprocess_audio, wav_bytes)
+        if audio_rms < settings.MIN_AUDIO_RMS:
+            logger.info(
+                f"[CryDetect] Skipping model: below energy gate (rms={audio_rms:.6f})"
+            )
+            is_crying = False
+        else:
+            is_crying, _cry_prob = await loop.run_in_executor(None, cry_service.detect_cry, features)
 
         result = {
             "cry_detected": bool(is_crying),
             "message": "Baby is crying! 🚨" if is_crying else "No cry detected",
             "timestamp": time.time(),
-            "source": "realtime_stream"
+            "source": "realtime_stream",
+            "audio_rms": audio_rms,
         }
 
         # Update state manager (broadcasts to main /ws clients)

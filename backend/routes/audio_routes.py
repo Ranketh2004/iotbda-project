@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 import logging
 import time
 
+from config import settings
 from utils.audio_processing import preprocess_audio
 from services.cry_detection_service import cry_service
 from services.state_manager import state_manager
@@ -27,18 +28,27 @@ async def detect_cry_endpoint(request: Request):
         # Update ESP32 connection status
         state_manager.update_esp_status(connected=True)
         
-        # 1. Preprocess the audio (extract mel spectrogram)
-        features = preprocess_audio(audio_bytes)
-        
-        # 2. Run prediction using the service
-        is_crying = cry_service.detect_cry(features)
-        
+        # 1. Preprocess (MFCC) + waveform RMS for silence gating
+        features, audio_rms = preprocess_audio(audio_bytes)
+
+        # 2. Skip model on near-silence — normalized MFCC of noise looks like fake "structure"
+        if audio_rms < settings.MIN_AUDIO_RMS:
+            logger.info(
+                f"No cry: below energy gate (audio_rms={audio_rms:.6f} < {settings.MIN_AUDIO_RMS})"
+            )
+            is_crying, cry_probability = False, 0.0
+        else:
+            is_crying, cry_probability = cry_service.detect_cry(features)
+
         # 3. Update state and notify WebSocket clients
         result = {
             "cry_detected": bool(is_crying),
             "message": "Your baby is crying!" if is_crying else "No cry detected",
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "audio_rms": audio_rms,
         }
+        if cry_probability is not None:
+            result["cry_probability"] = cry_probability
         
         await state_manager.update_cry_status(result)
         

@@ -30,7 +30,7 @@ def load_data(data_dir="data"):
     for file in glob.glob(crying_path):
         try:
             with open(file, "rb") as f:
-                features = preprocess_audio(f.read())
+                features, _rms = preprocess_audio(f.read())
                 # preprocess_audio returns shape (1, height, width, 1), we need just (height, width, 1) per sample
                 X.append(features[0])
                 y.append(1)
@@ -41,7 +41,7 @@ def load_data(data_dir="data"):
     for file in glob.glob(not_crying_path):
         try:
             with open(file, "rb") as f:
-                features = preprocess_audio(f.read())
+                features, _rms = preprocess_audio(f.read())
                 X.append(features[0])
                 y.append(0)
         except Exception as e:
