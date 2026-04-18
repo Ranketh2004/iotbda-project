@@ -13,6 +13,7 @@ from routes import auth_routes
 from routes import sensor_routes
 from routes import ws_routes
 from routes import audio_stream_routes
+from routes import uploads_routes
 from services.database import database
 
 # Configure logging
@@ -45,15 +46,7 @@ app.add_middleware(
 app.include_router(auth_routes.router)
 app.include_router(audio_routes.router)
 app.include_router(sensor_routes.router)
-
-# User-uploaded profile photos (signup / profile)
-_upload_root = Path(settings.UPLOAD_DIR)
-_upload_root.mkdir(parents=True, exist_ok=True)
-app.mount(
-    "/api/uploads",
-    StaticFiles(directory=str(_upload_root)),
-    name="user_uploads",
-)
+app.include_router(uploads_routes.router)
 app.include_router(ws_routes.router)
 app.include_router(audio_stream_routes.router)
 

@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, TypeAdapter, Valida
 from config import settings
 from services.database import database
 from services.email_service import send_reset_email
-from services.user_uploads import save_user_profile_image
+from services.user_uploads import photo_public_url_from_stored_value, save_user_profile_image
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 logger = logging.getLogger(__name__)
@@ -221,8 +221,8 @@ def _user_to_public(doc: dict) -> UserPublic:
         babyName=baby.get("name", ""),
         babyAge=baby.get("age_band", "0-3"),
         babyGender=baby.get("gender") or "other",
-        parentPhotoUrl=photos.get("parent") or "",
-        babyPhotoUrl=photos.get("baby") or "",
+        parentPhotoUrl=photo_public_url_from_stored_value(doc["_id"], "parent", photos.get("parent")),
+        babyPhotoUrl=photo_public_url_from_stored_value(doc["_id"], "baby", photos.get("baby")),
         guardians=guardians,
     )
 
@@ -310,14 +310,9 @@ async def register(
     user_id = await database.insert_user(user_doc)
     user_doc["_id"] = user_id
 
-    photo_updates: dict = {}
     try:
-        parent_url = await save_user_profile_image(user_id, "parent", parent_photo)
-        baby_url = await save_user_profile_image(user_id, "baby", baby_photo)
-        if parent_url:
-            photo_updates["parent"] = parent_url
-        if baby_url:
-            photo_updates["baby"] = baby_url
+        await save_user_profile_image(user_id, "parent", parent_photo)
+        await save_user_profile_image(user_id, "baby", baby_photo)
     except HTTPException:
         raise
     except Exception as e:
@@ -327,12 +322,11 @@ async def register(
             detail="Could not save profile photos.",
         )
 
-    if photo_updates:
-        user_doc["photos"] = photo_updates
-        await database.update_user_by_id(user_id, {"photos": photo_updates})
+    persisted = await database.get_user_by_id(user_id)
+    user_for_response = persisted or user_doc
 
     token = create_access_token(user_id)
-    return TokenResponse(access_token=token, user=_user_to_public(user_doc))
+    return TokenResponse(access_token=token, user=_user_to_public(user_for_response))
 
 
 @router.patch("/profile", response_model=UserPublic)
@@ -391,14 +385,9 @@ async def update_profile(
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    photos = dict(doc.get("photos") or {})
     try:
-        parent_url = await save_user_profile_image(uid, "parent", parent_photo)
-        baby_url = await save_user_profile_image(uid, "baby", baby_photo)
-        if parent_url:
-            photos["parent"] = parent_url
-        if baby_url:
-            photos["baby"] = baby_url
+        await save_user_profile_image(uid, "parent", parent_photo)
+        await save_user_profile_image(uid, "baby", baby_photo)
     except HTTPException:
         raise
     except Exception as e:
@@ -407,9 +396,6 @@ async def update_profile(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not save profile photos.",
         )
-
-    if photos:
-        set_fields["photos"] = photos
 
     ok = await database.patch_user(uid, set_fields=set_fields, unset_fields=unset or None)
     if not ok:
