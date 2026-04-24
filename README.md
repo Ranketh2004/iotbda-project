@@ -1,4 +1,4 @@
-# CryGuard — Smart Baby Cry Detection & Monitoring System
+# CryGuard - Smart Baby Cry Detection & Monitoring System
 
 A real-time baby monitoring system that uses an **ESP32** with an **INMP441 MEMS microphone** to detect baby cries using a TensorFlow ML model. It also streams live sensor data (temperature, humidity, motion, light) and provides **real-time audio listening** through a modern React dashboard.
 
@@ -6,12 +6,12 @@ A real-time baby monitoring system that uses an **ESP32** with an **INMP441 MEMS
 
 ## Features
 
-- **AI Cry Detection** — TensorFlow CNN model analyzes audio from ESP32 to detect baby crying
-- **Real-Time Audio Listen** — Stream live audio from the baby's room to your browser speaker
-- **Sensor Dashboard** — Live temperature, humidity, motion, and light level monitoring
-- **WebSocket Communication** — Instant updates with no polling
-- **Browser Notifications** — Desktop alerts when crying is detected
-- **ESP32 Connection Status** — Live connection indicator
+- **AI Cry Detection** - TensorFlow CNN model analyzes audio from ESP32 to detect baby crying
+- **Real-Time Audio Listen** - Stream live audio from the baby's room to your browser speaker
+- **Sensor Dashboard** - Live temperature, humidity, motion, and light level monitoring
+- **WebSocket Communication** - Instant updates with no polling
+- **Browser Notifications** - Desktop alerts when crying is detected
+- **ESP32 Connection Status** - Live connection indicator
 
 ---
 
@@ -428,4 +428,4 @@ The **Listen to Baby** button on the dashboard enables real-time audio monitorin
 
 ## License
 
-MIT License — feel free to use and modify for your projects.
+MIT License - feel free to use and modify for your projects.
