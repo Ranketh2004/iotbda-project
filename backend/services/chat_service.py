@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 _ESP_TIMEOUT_SEC = 30
+_CRY_REASONS = {"belly pain", "burping", "cold_hot", "discomfort", "hungry", "tired"}
 
 
 def _fmt_ts(ts: float | None) -> str:
@@ -25,6 +26,7 @@ def _build_system_prompt(
     sensor_history: list,
     notifications: list,
     care_logs: list,
+    cry_status: dict | None = None,
 ) -> str:
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -67,12 +69,44 @@ def _build_system_prompt(
     else:
         stats_str = "  No sensor history available."
 
+    # ── Latest cry detection (current status) ───────────────────────────────
+    if cry_status:
+        detected = cry_status.get("cry_detected", False)
+        label = cry_status.get("cry_label", "")
+        prob = cry_status.get("cry_probability") or cry_status.get("max_prob")
+        pred_type = cry_status.get("prediction_type", "binary")
+        confidence = f" (confidence: {prob:.0%})" if prob is not None else ""
+        if detected:
+            reason_note = f", reason: {label}" if label in _CRY_REASONS else ""
+            cry_status_str = f"  Crying detected{reason_note}{confidence} [{pred_type} model]"
+        else:
+            cry_status_str = f"  No crying detected{confidence}"
+    else:
+        cry_status_str = "  No cry prediction data available."
+
+    # ── Cry reason breakdown from recent notifications ───────────────────────
+    reason_counts: dict[str, int] = {}
+    for n in notifications:
+        lbl = n.get("cry_label", "")
+        if lbl in _CRY_REASONS:
+            reason_counts[lbl] = reason_counts.get(lbl, 0) + 1
+
+    if reason_counts:
+        total_with_reason = sum(reason_counts.values())
+        sorted_reasons = sorted(reason_counts.items(), key=lambda x: x[1], reverse=True)
+        reason_breakdown_str = "\n".join(
+            f"  {reason}: {count} ({round(100 * count / total_with_reason)}%)"
+            for reason, count in sorted_reasons
+        )
+    else:
+        reason_breakdown_str = "  No cry reason data yet (requires multiclass model output)."
+
     # ── Recent cry alerts ───────────────────────────────────────────────────
     if notifications:
-        lines = [
-            f"  [{_fmt_ts(n.get('timestamp'))}] {n.get('message', 'Cry detected')}"
-            for n in notifications[:20]
-        ]
+        lines = []
+        for n in notifications[:20]:
+            reason_tag = f" [reason: {n['cry_label']}]" if n.get("cry_label") in _CRY_REASONS else ""
+            lines.append(f"  [{_fmt_ts(n.get('timestamp'))}] {n.get('message', 'Cry detected')}{reason_tag}")
         notif_str = "\n".join(lines)
     else:
         notif_str = "  No recent cry alerts."
@@ -115,6 +149,12 @@ Your role is to help parents understand their baby's wellbeing through data-driv
 [ENVIRONMENT STATISTICS]
 {stats_str}
 
+[LATEST CRY DETECTION]
+{cry_status_str}
+
+[CRY REASON BREAKDOWN (last {len(notifications)} alerts)]
+{reason_breakdown_str}
+
 [RECENT CRY ALERTS]
 {notif_str}
 
@@ -152,13 +192,14 @@ async def get_chat_reply(
 
     sensor_history = await database.get_sensor_history(limit=100)
     notifications = await database.get_notifications(limit=30)
+    cry_status = await database.get_cry_status(user_id)
 
     care_logs: list = []
     if user_id:
         care_logs = await database.get_parent_care_logs_for_user(user_id, limit=14)
 
     system_prompt = _build_system_prompt(
-        latest_sensor, esp_connected, sensor_history, notifications, care_logs
+        latest_sensor, esp_connected, sensor_history, notifications, care_logs, cry_status
     )
 
     # ── Build messages array ─────────────────────────────────────────────────
