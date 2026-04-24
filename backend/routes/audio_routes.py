@@ -40,20 +40,23 @@ async def detect_cry_endpoint(request: Request):
         else:
             is_crying, cry_probability = cry_service.detect_cry(features)
 
-        # 3. Update state and notify WebSocket clients
+        # 3. Combine mic + PIR; cry_detected / alerts only when both agree
         result = {
-            "cry_detected": bool(is_crying),
             "message": "Your baby is crying!" if is_crying else "No cry detected",
             "timestamp": time.time(),
             "audio_rms": audio_rms,
         }
         if cry_probability is not None:
             result["cry_probability"] = cry_probability
-        
+
+        result = state_manager.merge_mic_cry_with_pir(is_crying, result)
+
         await state_manager.update_cry_status(result)
-        
-        if is_crying:
-            logger.info("Cry detected!")
+
+        if result.get("cry_detected"):
+            logger.info("Cry alert: audio + PIR motion confirmed.")
+        elif is_crying:
+            logger.info("Mic cry-like; PIR no motion — no combined alert.")
         else:
             logger.info("No cry detected.")
             

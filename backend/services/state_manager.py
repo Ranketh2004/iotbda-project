@@ -4,6 +4,7 @@ import time
 import logging
 from typing import List, Dict, Any
 from fastapi import WebSocket
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,24 @@ class StateManager:
 
         # Notification history (in-memory cache, last 50)
         self.notifications: List[Dict[str, Any]] = []
+
+    @staticmethod
+    def _coerce_bool(value: Any, default: bool = False) -> bool:
+        """
+        Normalize mixed bool-like payloads (bool/int/str) from device or API.
+        Prevents values like "false" (non-empty string) becoming True via bool().
+        """
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            v = value.strip().lower()
+            if v in {"true", "1", "yes", "y", "on"}:
+                return True
+            if v in {"false", "0", "no", "n", "off", ""}:
+                return False
+        return default
 
     # ── WebSocket Client Management ──────────────────────────
 
@@ -84,14 +103,57 @@ class StateManager:
             return False
         return (time.time() - self.esp_last_seen) < self.ESP_TIMEOUT
 
+    def merge_mic_cry_with_pir(self, mic_cry: bool, result: dict) -> dict:
+        """
+        Combine microphone cry model output with latest PIR motion from sensor_data.
+        By default, allow mic-only alerts when model confidence is high enough.
+        This helps detect distant cries that may not trigger PIR motion.
+        """
+        merged = dict(result)
+        pir_motion = self._coerce_bool(self.sensor_data.get("motion", False), default=False)
+        merged["mic_cry_detected"] = bool(mic_cry)
+        merged["pir_motion"] = pir_motion
+        prob_raw = merged.get("cry_probability")
+        try:
+            cry_probability = float(prob_raw) if prob_raw is not None else None
+        except (TypeError, ValueError):
+            cry_probability = None
+
+        pir_confirmed = bool(mic_cry and pir_motion)
+        mic_only_high_conf = bool(
+            mic_cry
+            and settings.ALLOW_MIC_ONLY_CRY_ALERT
+            and cry_probability is not None
+            and cry_probability >= settings.MIC_ONLY_CRY_MIN_PROBABILITY
+        )
+        merged["cry_detected"] = bool(pir_confirmed or mic_only_high_conf)
+
+        if merged["cry_detected"]:
+            if pir_confirmed:
+                merged["message"] = "Baby is crying — audio and motion confirmed."
+            else:
+                merged["message"] = "Baby is crying — high-confidence audio detected."
+        elif mic_cry:
+            if settings.ALLOW_MIC_ONLY_CRY_ALERT:
+                merged["message"] = (
+                    "Cry-like audio detected, but confidence is below mic-only alert threshold."
+                )
+            else:
+                merged["message"] = (
+                    "Cry-like audio; PIR shows no motion — combined alert not sent."
+                )
+        else:
+            merged.setdefault("message", "No cry detected")
+        return merged
+
     async def update_sensor_data(self, data: dict):
         from services.database import database
 
         self.sensor_data = {
             "temperature": data.get("temperature"),
             "humidity": data.get("humidity"),
-            "motion": data.get("motion", False),
-            "light_dark": data.get("light_dark", False),
+            "motion": self._coerce_bool(data.get("motion", False), default=False),
+            "light_dark": self._coerce_bool(data.get("light_dark", False), default=False),
             "timestamp": time.time(),
         }
         self.update_esp_status(connected=True)
