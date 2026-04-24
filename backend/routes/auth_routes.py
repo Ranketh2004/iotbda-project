@@ -442,7 +442,7 @@ async def login(body: LoginRequest):
     return TokenResponse(access_token=token, user=_user_to_public(user))
 
 
-# ── Forgot / Reset Password ─────────────────────────────
+# Forgot / Reset Password
 
 class ForgotPasswordRequest(BaseModel):
     email: str = Field(..., min_length=1)
@@ -454,7 +454,6 @@ class ResetPasswordRequest(BaseModel):
     password_confirm: str = Field(..., min_length=1)
 
 
-# In-memory reset tokens: token → {user_id, expires}
 _reset_tokens: dict[str, dict] = {}
 RESET_TOKEN_EXPIRE_MINUTES = 15
 
@@ -464,11 +463,9 @@ async def forgot_password(body: ForgotPasswordRequest):
     """Generate a password reset token and send it via email."""
     email_norm = database.normalize_email(body.email)
     user = await database.find_user_by_email(email_norm)
-    # Always return success to avoid leaking whether email exists
     if not user:
         return {"message": "If that email is registered, a reset link has been sent."}
 
-    # Google-only accounts have no password to reset
     if not user.get("password_hash"):
         return {"message": "If that email is registered, a reset link has been sent."}
 
@@ -519,13 +516,12 @@ async def read_me(authorization: str | None = Header(None)):
     return _user_to_public(doc)
 
 
-# ── Google OAuth ─────────────────────────────────────────
+# Google OAuth
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
-# In-memory store for state ↔ nonce (short-lived; fine for single-instance dev)
 _google_oauth_states: dict[str, float] = {}
 
 
@@ -554,7 +550,7 @@ async def google_login():
 @router.get("/google/callback")
 async def google_callback(code: str = "", state: str = ""):
     """Exchange Google auth code for tokens, create/find user, redirect with JWT."""
-    # Validate state to prevent CSRF
+ 
     if not state or state not in _google_oauth_states:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state.")
     del _google_oauth_states[state]
@@ -562,7 +558,7 @@ async def google_callback(code: str = "", state: str = ""):
     if not code:
         raise HTTPException(status_code=400, detail="Missing authorization code.")
 
-    # Exchange code for tokens
+  
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(
             GOOGLE_TOKEN_URL,
@@ -605,7 +601,7 @@ async def google_callback(code: str = "", state: str = ""):
     if not user:
         user_doc = {
             "email": google_email,
-            "password_hash": "",  # no password for Google-only accounts
+            "password_hash": "",  
             "full_name": google_name,
             "mother": {"name": google_name, "phone": "", "email": google_email},
             "father": {"name": "", "phone": "", "email": ""},
@@ -618,12 +614,10 @@ async def google_callback(code: str = "", state: str = ""):
         user_doc["_id"] = user_id
         user = user_doc
     else:
-        # Optionally update google_sub if not set
         if not user.get("google_sub"):
             await database.update_user_by_id(user["_id"], {"google_sub": ginfo.get("sub", "")})
 
     app_token = create_access_token(user["_id"])
 
-    # Redirect back to frontend with token in query param
     redirect_url = f"{settings.GOOGLE_REDIRECT_URI}/auth/google/callback?token={urllib.parse.quote(app_token)}&user={urllib.parse.quote(user['_id'])}"
     return RedirectResponse(redirect_url)

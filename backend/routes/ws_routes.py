@@ -17,7 +17,6 @@ async def websocket_endpoint(ws: WebSocket):
     await state_manager.register(ws)
     try:
         while True:
-            # Keep connection alive; optionally handle client messages
             data = await ws.receive_text()
             logger.debug(f"WS message from client: {data}")
     except WebSocketDisconnect:

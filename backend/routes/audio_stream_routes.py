@@ -14,20 +14,20 @@ from services.state_manager import state_manager
 router = APIRouter(tags=["AudioStream"])
 logger = logging.getLogger(__name__)
 
-# ── Connected listener clients (browser) ─────────────────────
+# Connected listener clients 
 listener_clients: List[WebSocket] = []
 
-# ── Track ESP32 audio source ─────────────────────────────────
+# Track ESP32 audio source
 esp_audio_connected: bool = False
 
-# ── Real-time cry detection settings ─────────────────────────
+# Real-time cry detection settings
 SAMPLE_RATE = 16000
 SAMPLE_BITS = 16
 CHANNELS = 1
 CRY_DETECT_SECONDS = 5
-CRY_DETECT_BYTES = SAMPLE_RATE * (SAMPLE_BITS // 8) * CRY_DETECT_SECONDS  # 96000 bytes
+CRY_DETECT_BYTES = SAMPLE_RATE * (SAMPLE_BITS // 8) * CRY_DETECT_SECONDS 
 WAV_HEADER_SIZE = 44
-MIN_DETECT_INTERVAL = 2.0  # seconds between detections to avoid spam
+MIN_DETECT_INTERVAL = 2.0  
 
 
 def build_wav_header(data_size: int) -> bytes:
@@ -50,7 +50,7 @@ async def run_cry_detection(pcm_data: bytes):
         wav_header = build_wav_header(len(pcm_data))
         wav_bytes = wav_header + pcm_data
 
-        # Preprocess and detect (run in thread to not block event loop)
+        # Preprocess and detect 
         loop = asyncio.get_event_loop()
         features, audio_rms = await loop.run_in_executor(None, preprocess_audio, wav_bytes)
         prediction_meta = {}
@@ -75,10 +75,9 @@ async def run_cry_detection(pcm_data: bytes):
             result.update(prediction_meta)
         result = state_manager.merge_mic_cry_with_pir(is_crying, result)
 
-        # Update state manager (broadcasts to main /ws clients)
+        # Update state manager 
         await state_manager.update_cry_status(result)
 
-        # Also send cry alert directly to audio-listen clients when mic + PIR agree
         if result.get("cry_detected"):
             logger.warning("[CryDetect] 🚨 Combined cry alert (audio + PIR motion).")
             alert_msg = json.dumps({"type": "cry_alert", "data": result})
@@ -111,7 +110,6 @@ async def audio_stream_from_esp(ws: WebSocket):
     esp_audio_connected = True
     logger.info("[AudioStream] ESP32 audio source connected.")
 
-    # Accumulation buffer for cry detection
     pcm_buffer = bytearray()
     last_detection_time = 0
 
@@ -119,7 +117,6 @@ async def audio_stream_from_esp(ws: WebSocket):
         while True:
             data = await ws.receive_bytes()
 
-            # Relay to all browser listeners
             dead: List[WebSocket] = []
             for client in listener_clients:
                 try:
@@ -130,20 +127,16 @@ async def audio_stream_from_esp(ws: WebSocket):
                 if d in listener_clients:
                     listener_clients.remove(d)
 
-            # Accumulate for cry detection
             pcm_buffer.extend(data)
 
             if len(pcm_buffer) >= CRY_DETECT_BYTES:
                 now = time.time()
                 if now - last_detection_time >= MIN_DETECT_INTERVAL:
                     last_detection_time = now
-                    # Take exactly CRY_DETECT_BYTES and run detection
                     chunk = bytes(pcm_buffer[:CRY_DETECT_BYTES])
                     pcm_buffer = pcm_buffer[CRY_DETECT_BYTES:]
-                    # Run detection without blocking the relay loop
                     asyncio.create_task(run_cry_detection(chunk))
                 else:
-                    # Discard old data to prevent memory growth
                     pcm_buffer = pcm_buffer[-CRY_DETECT_BYTES:]
 
     except WebSocketDisconnect:
@@ -167,11 +160,9 @@ async def audio_listen(ws: WebSocket):
     logger.info(f"[AudioStream] Browser listener connected. Total: {count}, ESP32 source: {esp_audio_connected}")
 
     try:
-        # Send a text message so the browser knows the connection is live
         await ws.send_text("connected")
 
         while True:
-            # Keep alive — client may send ping/control messages
             msg = await ws.receive_text()
             if msg == "ping":
                 await ws.send_text("pong")

@@ -24,7 +24,7 @@ class Settings:
     EXPECTED_FRAMES = 313
     # Binary cry model: probability above this counts as crying (sigmoid output)
     CRY_PROBABILITY_THRESHOLD: float = float(os.getenv("CRY_PROBABILITY_THRESHOLD", "0.42"))
-    # Skip neural net when waveform RMS is below this (silence / line noise); librosa float audio in [-1, 1]
+    # Skip neural net when waveform RMS is below this (silence / line noise)
     MIN_AUDIO_RMS: float = float(os.getenv("MIN_AUDIO_RMS", "0.004"))
     # Multi-class softmax: require top class this confident (reduces false cries on ambiguous input)
     CRY_MULTICLASS_MIN_CONFIDENCE: float = float(os.getenv("CRY_MULTICLASS_MIN_CONFIDENCE", "0.58"))

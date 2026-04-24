@@ -181,7 +181,6 @@ async def create_care_log(body: CareLogCreate, authorization: str | None = Heade
             detail=f"entry_date must be today's date in your timezone ({expected_today}).",
         )
 
-    # day_type must match weekday/weekend for entry_date
     try:
         y, m, d = (int(x) for x in body.entry_date.split("-"))
         wd = date(y, m, d).weekday()

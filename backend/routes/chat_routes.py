@@ -23,7 +23,6 @@ async def chat(body: ChatRequest, authorization: str | None = Header(None)):
     if not msg:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message cannot be empty")
 
-    # Auth is optional — unauthenticated users get sensor/alert context but no care-log data
     user_id: str | None = None
     if authorization:
         try:

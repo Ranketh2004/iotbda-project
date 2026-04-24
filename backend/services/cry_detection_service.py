@@ -3,12 +3,10 @@ import logging
 import numpy as np
 from typing import Any, Optional, Tuple
 
-# Suppress TF logs
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 logger = logging.getLogger(__name__)
 
-# Try to import tensorflow, but don't crash if not installed yet
 try:
     import tensorflow as tf
     TF_AVAILABLE = True
@@ -26,7 +24,6 @@ class CryDetectionService:
         self.model = None
         self._output_dim: Optional[int] = None
         self.load_model()
-        # Only used if a multi-class softmax model is loaded (not the default train_model.py binary head)
         self.class_names = [
             "belly pain", "burping", "cold_hot", "discomfort", "hungry", "tired",
         ]
@@ -42,7 +39,6 @@ class CryDetectionService:
             if os.path.exists(settings.MODEL_PATH):
                 self.model = tf.keras.models.load_model(settings.MODEL_PATH)
                 out = self.model.output_shape
-                # output_shape can be (None, 1) or (None, N)
                 self._output_dim = int(out[-1]) if out[-1] is not None else None
                 logger.info(
                     f"Successfully loaded model from {settings.MODEL_PATH} (output_dim={self._output_dim})"
@@ -71,7 +67,6 @@ class CryDetectionService:
             out_dim = self._output_dim if self._output_dim is not None else int(pred.shape[-1])
 
             if out_dim == 1:
-                # Binary sigmoid: column is P(crying) vs not (matches train_model.py)
                 prob_cry = float(np.squeeze(pred))
                 detected = prob_cry >= settings.CRY_PROBABILITY_THRESHOLD
                 logger.info(
@@ -82,7 +77,6 @@ class CryDetectionService:
                     "cry_label": "cry" if detected else "no_cry",
                 }
 
-            # Multi-class softmax (optional / legacy; train_model.py uses binary only)
             idx = int(np.argmax(pred, axis=-1).flat[0])
             max_prob = float(np.max(pred))
             label = self.class_names[idx] if idx < len(self.class_names) else "unknown"
@@ -105,5 +99,4 @@ class CryDetectionService:
             return False, None, {}
 
 
-# Instantiate service as a singleton to load the model once when server starts
 cry_service = CryDetectionService()

@@ -35,7 +35,6 @@ class Database:
             print("MongoDB connected successfully!")
             logger.info(f"Connected to MongoDB at {settings.MONGO_URI}, database: {settings.MONGO_DB_NAME}")
 
-            # Create indexes for efficient queries
             await self.db.sensor_data.create_index("timestamp", unique=False)
             await self.db.sensor_data.create_index([("user_id", 1), ("timestamp", -1)], unique=False)
             await self.db.sensor_data.create_index([("logged_user_id", 1), ("timestamp", -1)], unique=False)
@@ -62,7 +61,7 @@ class Database:
             self.client.close()
             logger.info("MongoDB connection closed.")
 
-    # ── Sensor Data ──────────────────────────────────────────
+    # Sensor Data 
 
     async def save_sensor_data(self, data: dict, user_id: str | None = None):
         """Insert a sensor reading document into the sensor_data collection."""
@@ -95,7 +94,7 @@ class Database:
             doc["_id"] = str(doc["_id"])
         return docs
 
-    # ── Notifications ────────────────────────────────────────
+    # Notifications 
 
     async def save_notification(self, notification: dict, user_id: str | None = None):
         """Save a cry alert notification."""
@@ -117,7 +116,7 @@ class Database:
             doc["_id"] = str(doc["_id"])
         return docs
 
-    # ── Cry Status ───────────────────────────────────────────
+    # Cry Status 
 
     async def save_cry_status(self, status: dict, user_id: str | None = None):
         """Save/update the latest cry detection status."""
@@ -139,7 +138,7 @@ class Database:
                 doc.pop("user_id", None)
         return doc
 
-    # ── ESP Status ───────────────────────────────────────────
+    # ESP Status 
 
     async def save_esp_status(self, connected: bool, last_seen: float):
         """Save ESP32 connection status."""
@@ -157,7 +156,7 @@ class Database:
             doc.pop("_type", None)
         return doc
 
-    # ── Users (parent accounts) ─────────────────────────────
+    # Users (parent accounts)
 
     @staticmethod
     def normalize_email(email: str) -> str:
@@ -249,7 +248,7 @@ class Database:
         r = await self.db.users.update_one({"_id": oid}, cmd)
         return r.matched_count > 0
 
-    # ── Parent daily care log (CSV-aligned fields) ───────────
+    # Parent daily care log 
 
     async def upsert_parent_care_log(self, user_id: str, entry_date: str, doc: dict) -> str:
         """

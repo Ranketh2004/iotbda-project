@@ -39,7 +39,6 @@ async def receive_sensor_data(request: Request, authorization: str | None = Head
         logger.info(f"Sensor data received: {data}")
         user_id = _optional_user_id(authorization, data) or state_manager.active_user_id
 
-        # Update in-memory state + broadcast via WebSocket + save to MongoDB
         await state_manager.update_sensor_data(data, user_id=user_id)
 
         return JSONResponse(content={

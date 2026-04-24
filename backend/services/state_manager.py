@@ -21,9 +21,9 @@ class StateManager:
         # ESP32 connection tracking
         self.esp_connected: bool = False
         self.esp_last_seen: float = 0
-        self.ESP_TIMEOUT: float = 10.0  # seconds before marking as disconnected
+        self.ESP_TIMEOUT: float = 10.0  
 
-        # Latest sensor data (in-memory cache)
+        # Latest sensor data 
         self.sensor_data: Dict[str, Any] = {
             "temperature": None,
             "humidity": None,
@@ -32,7 +32,7 @@ class StateManager:
             "timestamp": None,
         }
 
-        # Latest cry detection result (in-memory cache)
+        # Latest cry detection result
         self.cry_status: Dict[str, Any] = {
             "cry_detected": False,
             "message": "No data yet",
@@ -40,7 +40,7 @@ class StateManager:
         }
         self.active_user_id: str | None = None
 
-        # Notification history (in-memory cache, last 50)
+        # Notification history 
         self.notifications: List[Dict[str, Any]] = []
 
     @staticmethod
@@ -61,7 +61,7 @@ class StateManager:
                 return False
         return default
 
-    # ── WebSocket Client Management ──────────────────────────
+    # WebSocket Client Management
 
     async def register(self, ws: WebSocket):
         await ws.accept()
@@ -75,7 +75,7 @@ class StateManager:
             self.connected_clients.remove(ws)
         logger.info(f"WebSocket client disconnected. Total: {len(self.connected_clients)}")
 
-    # ── Broadcast Helpers ────────────────────────────────────
+    # Broadcast Helpers 
 
     async def _broadcast(self, message: dict):
         dead: List[WebSocket] = []
@@ -93,7 +93,7 @@ class StateManager:
         except Exception:
             self.unregister(ws)
 
-    # ── State Updates ────────────────────────────────────────
+    # State Updates
 
     def update_esp_status(self, connected: bool = True):
         self.esp_connected = connected
@@ -227,7 +227,7 @@ class StateManager:
                 "data": result,
             })
 
-    # ── Full State Snapshot ──────────────────────────────────
+    # Full State Snapshot
 
     async def _full_state(self) -> dict:
         """Build full state from MongoDB, falling back to in-memory cache."""
