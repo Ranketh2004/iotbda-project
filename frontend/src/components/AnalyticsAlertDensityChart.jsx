@@ -12,9 +12,11 @@ export default function AnalyticsAlertDensityChart({ events, hours = 48 }) {
   const barW = innerW / bins.length - 2;
 
   return (
-    <section className="analytics-viz-card" aria-label="Cry alerts by hour bucket">
-      <h2 className="analytics-viz-title">Alert density</h2>
-      <p className="analytics-viz-sub">Last {hours} hours — merged events stacked into hourly bins</p>
+    <section className="analytics-viz-card" aria-label="When cry alerts happened by hour">
+      <h2 className="analytics-viz-title">When alerts happened</h2>
+      <p className="analytics-viz-sub">
+        Last {hours} hours, hour by hour—taller bars mean more alerts in that hour (your device time).
+      </p>
       <svg viewBox={`0 0 ${w} ${h}`} className="analytics-viz-svg" role="img">
         {bins.map((b, i) => {
           const bh = (b.count / max) * innerH;
@@ -36,7 +38,7 @@ export default function AnalyticsAlertDensityChart({ events, hours = 48 }) {
           );
         })}
       </svg>
-      <div className="analytics-density-foot">Hover bars (native tooltip) for exact counts per hour slice.</div>
+      <div className="analytics-density-foot">Hover a bar to see the exact count for that hour.</div>
     </section>
   );
 }

@@ -1,6 +1,10 @@
 import React, { useMemo } from 'react';
 
-export default function AnalyticsCryReasonChart({ histogram, title = 'Reason mix (merged window)' }) {
+export default function AnalyticsCryReasonChart({
+  histogram,
+  title = 'What we guessed baby needed',
+  subtitle = 'How often each reason showed up in recent alerts (best estimate, not a diagnosis).',
+}) {
   const rows = histogram?.length ? histogram : [{ reason: 'No data', count: 0 }];
   const max = Math.max(...rows.map((r) => r.count), 1);
   const w = 400;
@@ -20,7 +24,7 @@ export default function AnalyticsCryReasonChart({ histogram, title = 'Reason mix
   return (
     <section className="analytics-viz-card" aria-label={title}>
       <h2 className="analytics-viz-title">{title}</h2>
-      <p className="analytics-viz-sub">Visual analytics — frequency of interpreted reasons</p>
+      <p className="analytics-viz-sub">{subtitle}</p>
       <svg viewBox={`0 0 ${w} ${h}`} className="analytics-viz-svg" role="img">
         {bars.map((b) => (
           <g key={b.reason}>
