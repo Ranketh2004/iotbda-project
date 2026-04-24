@@ -94,6 +94,24 @@ export async function fetchCareLogSuggestions(tz, entryDate) {
   return res.json();
 }
 
+/**
+ * Send a message to the LLM nursery coach agent.
+ * @param {string} message - The user's message
+ * @param {Array<{role:string, content:string}>} history - Prior conversation turns
+ */
+export async function sendChatMessage(message, history = []) {
+  const res = await fetch(`${API_BASE}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ message, history }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Chat request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function submitCareLog(payload) {
   const endpoints = ['/api/care-logs/submit', '/api/care-logs/submit/', '/api/care-logs', '/api/care-logs/'];
   let lastError = null;

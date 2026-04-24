@@ -56,6 +56,10 @@ class Settings:
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
     SMTP_FROM_NAME: str = os.getenv("SMTP_FROM_NAME", "Infant Cry Guard")
 
+    # OpenAI (LLM chat agent)
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
     def validate(self):
         if not self.MONGO_URI:
             raise ValueError(f"MONGO_URI is not set. Expected it in: {ENV_PATH}")
