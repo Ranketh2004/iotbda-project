@@ -1,5 +1,5 @@
 #include <WiFi.h>
-#include <HTTPClient.h>
+#include <HTTPClient.h>][;]
 #include <WebSocketsClient.h>
 #include <driver/i2s.h>
 #include <DHT.h>

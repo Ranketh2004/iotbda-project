@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UtensilsCrossed,
@@ -18,68 +18,27 @@ import {
 import DashboardHeader from '../components/DashboardHeader';
 import DashboardFooter from '../components/DashboardFooter';
 import CryAlertDetailModal from '../components/CryAlertDetailModal';
+import AnalyticsCryReasonChart from '../components/AnalyticsCryReasonChart';
+import AnalyticsAlertDensityChart from '../components/AnalyticsAlertDensityChart';
+import AnalyticsSensorCareInsights from '../components/AnalyticsSensorCareInsights';
+import { fetchSensorHistory, fetchNotifications } from '../services/api';
+import {
+  mergeSensorHistory,
+  mergeNotifications,
+  mergeCryEvents,
+  getCsvSensorHistory,
+  getCsvNotifications,
+  getCsvCryEvents,
+  reasonHistogram,
+  formatEventTime,
+  avgHumidity,
+  computeAnalyticsSummary,
+} from '../utils/analyticsData';
 
 const FILTERS = [
   { id: 'all', label: 'ALL' },
   { id: 'critical', label: 'CRITICAL' },
   { id: 'mild', label: 'MILD' },
-];
-
-const EVENTS = [
-  {
-    id: '1',
-    reason: 'Hungry',
-    severity: 'critical',
-    confidence: 94,
-    confidenceVariant: 'green',
-    time: 'Today at 2:14 PM',
-    icon: 'frown',
-    iconTone: 'blue',
-    temp: '26°C',
-    humidity: '65%',
-    light: 'Soft',
-    lightIcon: 'sun',
-    footerLeft: 'No significant motion',
-    footerMid: 'Escalation not required',
-    escalation: null,
-    motion: 'None',
-  },
-  {
-    id: '2',
-    reason: 'Tired / Sleepy',
-    severity: 'critical',
-    confidence: 81,
-    confidenceVariant: 'yellow',
-    time: 'Today at 11:30 AM',
-    icon: 'moon',
-    iconTone: 'yellow',
-    temp: '27°C',
-    humidity: '68%',
-    light: 'Dim',
-    lightIcon: 'moon',
-    footerLeft: 'Frequent movement detected',
-    footerMid: null,
-    escalation: 'triggered',
-    motion: 'Detected',
-  },
-  {
-    id: '3',
-    reason: 'Discomfort',
-    severity: 'mild',
-    confidence: 72,
-    confidenceVariant: 'grey',
-    time: 'Today at 8:45 AM',
-    icon: 'circle',
-    iconTone: 'grey',
-    temp: '25°C',
-    humidity: '62%',
-    light: null,
-    lightIcon: null,
-    footerLeft: 'Self-soothed after 45s',
-    footerMid: null,
-    escalation: null,
-    motion: 'None',
-  },
 ];
 
 function EventIcon({ type, tone }) {
@@ -114,12 +73,84 @@ export default function AnalyticsPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState('all');
   const [detailEvent, setDetailEvent] = useState(null);
+  const [mergedSensors, setMergedSensors] = useState([]);
+  const [mergedEvents, setMergedEvents] = useState([]);
 
+  const loadMerge = useCallback(async () => {
+    try {
+      const [histRes, notifRes] = await Promise.all([
+        fetchSensorHistory(200).catch(() => ({ data: [] })),
+        fetchNotifications(120).catch(() => ({ notifications: [] })),
+      ]);
+      const mongoS = histRes?.data || [];
+      const mongoN = notifRes?.notifications || [];
+      const csvS = getCsvSensorHistory();
+      const csvN = getCsvNotifications();
+      const csvCry = getCsvCryEvents();
+      const ms = mergeSensorHistory(mongoS, csvS);
+      const mn = mergeNotifications(mongoN, csvN);
+      const ev = mergeCryEvents(csvCry, mn, ms);
+      setMergedSensors(ms);
+      setMergedEvents(ev);
+    } catch (e) {
+      console.error('[analytics]', e);
+      const csvS = getCsvSensorHistory();
+      const csvN = getCsvNotifications();
+      const csvCry = getCsvCryEvents();
+      const ms = mergeSensorHistory([], csvS);
+      const mn = mergeNotifications([], csvN);
+      setMergedSensors(ms);
+      setMergedEvents(mergeCryEvents(csvCry, mn, ms));
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMerge();
+    const id = setInterval(loadMerge, 60000);
+    return () => clearInterval(id);
+  }, [loadMerge]);
+
+  const summary = useMemo(
+    () => computeAnalyticsSummary(mergedEvents, mergedSensors),
+    [mergedEvents, mergedSensors],
+  );
+  const histogram = useMemo(() => reasonHistogram(mergedEvents), [mergedEvents]);
   const visibleEvents = useMemo(() => {
-    if (filter === 'all') return EVENTS;
-    if (filter === 'critical') return EVENTS.filter((e) => e.severity === 'critical');
-    return EVENTS.filter((e) => e.severity === 'mild');
-  }, [filter]);
+    const list = mergedEvents.map((e) => ({
+      ...e,
+      time: formatEventTime(e.timestamp),
+    }));
+    if (filter === 'all') return list;
+    if (filter === 'critical') return list.filter((e) => e.severity === 'critical');
+    return list.filter((e) => e.severity === 'mild');
+  }, [mergedEvents, filter]);
+
+  const humAvg = avgHumidity(mergedSensors);
+  const insightText = useMemo(() => {
+    if (humAvg != null && humAvg > 71) {
+      return `Humidity is averaging about ${humAvg.toFixed(
+        0,
+      )}% in the merged window (live MongoDB + nutrition cohort CSV). Ventilation or dry mode before sleep often reduces discomfort-tagged cries in tropical climates.`;
+    }
+    if (humAvg != null) {
+      return `Humidity near ${humAvg.toFixed(
+        0,
+      )}% sits in a comfortable band for most infants. Keep comparing against live readings as weather shifts.`;
+    }
+    return 'Merge more sensor rows from the device to tighten environment insights; the nutrition cohort CSV still fills the chart meanwhile.';
+  }, [humAvg]);
+
+  const todayLabel = useMemo(() => {
+    try {
+      return new Date().toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return 'Today';
+    }
+  }, []);
 
   return (
     <div className="dash-page analytics-page">
@@ -127,43 +158,63 @@ export default function AnalyticsPage() {
 
       <div className="analytics-shell">
         <header className="analytics-page-head">
-          <h1 className="analytics-title">Cry History</h1>
+          <h1 className="analytics-title">Care analytics</h1>
           <p className="analytics-subtitle">
-            Analysis and patterns for baby&apos;s well-being in Colombo, Sri Lanka.
+            Interactive dashboards grounded in merged data: your MongoDB collections (sensor_data, notifications)
+            plus infant_cry_nutrition_data.csv (daily cry frequency and feeding context, time-aligned for charts).
+            Use the nursery coach chat from the dashboard for conversational exploration.
           </p>
         </header>
 
         <div className="analytics-stats">
           <article className="analytics-stat-card">
             <UtensilsCrossed size={22} className="analytics-stat-card-ico" />
-            <p className="analytics-stat-label">Most Common Reason</p>
-            <p className="analytics-stat-value">Hungry</p>
-            <p className="analytics-stat-trend analytics-stat-trend--down">
-              <TrendingDown size={14} /> 10% from last week
-            </p>
+            <p className="analytics-stat-label">Leading reason</p>
+            <p className="analytics-stat-value">{summary.topReason}</p>
+            <p className="analytics-stat-neutral">{summary.topTrend}</p>
           </article>
           <article className="analytics-stat-card">
             <AlertOctagon size={22} className="analytics-stat-card-ico" />
-            <p className="analytics-stat-label">Cry Alerts Today</p>
-            <p className="analytics-stat-value">4</p>
-            <p className="analytics-stat-trend analytics-stat-trend--up">
-              <TrendingUp size={14} /> 2% from average
+            <p className="analytics-stat-label">Alerts (last 24h)</p>
+            <p className="analytics-stat-value">{summary.alertsToday}</p>
+            <p
+              className={
+                summary.alertsTrend === 'up'
+                  ? 'analytics-stat-trend analytics-stat-trend--up'
+                  : summary.alertsTrend === 'down'
+                    ? 'analytics-stat-trend analytics-stat-trend--down'
+                    : 'analytics-stat-neutral'
+              }
+            >
+              {summary.alertsTrend === 'up' ? (
+                <TrendingUp size={14} />
+              ) : summary.alertsTrend === 'down' ? (
+                <TrendingDown size={14} />
+              ) : null}{' '}
+              {summary.alertsTrendLabel}
             </p>
           </article>
           <article className="analytics-stat-card">
             <Timer size={22} className="analytics-stat-card-ico" />
-            <p className="analytics-stat-label">Avg. Response Time</p>
-            <p className="analytics-stat-value">1m 20s</p>
-            <p className="analytics-stat-neutral">Consistent with yesterday</p>
+            <p className="analytics-stat-label">Environment cue</p>
+            <p className="analytics-stat-value">{summary.avgResponseLabel}</p>
+            <p className="analytics-stat-neutral">{summary.avgResponseDetail}</p>
           </article>
+        </div>
+
+        <AnalyticsSensorCareInsights />
+
+        <div className="analytics-viz-grid">
+          <AnalyticsCryReasonChart histogram={histogram} />
+          <AnalyticsAlertDensityChart events={mergedEvents} hours={48} />
         </div>
 
         <section className="analytics-recent">
           <div className="analytics-recent-head">
-            <h2 className="analytics-recent-title">Recent Events</h2>
+            <h2 className="analytics-recent-title">Cry-style events</h2>
             <div className="analytics-recent-tools">
               <button type="button" className="analytics-date-btn">
-                Today, Oct 24
+                {todayLabel}
               </button>
               <div className="analytics-filter" role="group" aria-label="Filter events">
                 {FILTERS.map((f) => (
@@ -188,9 +239,7 @@ export default function AnalyticsPage() {
                   <div className="analytics-event-main">
                     <div className="analytics-event-title-row">
                       <span className="analytics-event-reason">{ev.reason}</span>
-                      <span
-                        className={`analytics-badge analytics-badge--${ev.confidenceVariant}`}
-                      >
+                      <span className={`analytics-badge analytics-badge--${ev.confidenceVariant}`}>
                         {ev.confidence}% CONFIDENCE
                       </span>
                     </div>
@@ -228,9 +277,7 @@ export default function AnalyticsPage() {
                         {ev.footerLeft}
                       </span>
                     )}
-                    {ev.footerMid && (
-                      <span className="analytics-foot-mid">{ev.footerMid}</span>
-                    )}
+                    {ev.footerMid && <span className="analytics-foot-mid">{ev.footerMid}</span>}
                     {ev.escalation === 'triggered' && (
                       <span className="analytics-esc-badge">Escalation Triggered</span>
                     )}
@@ -251,8 +298,7 @@ export default function AnalyticsPage() {
         <div className="analytics-insight">
           <Lightbulb size={22} className="analytics-insight-bulb" aria-hidden />
           <p>
-            <strong>Insight for Sri Lankan Parents:</strong> Humidity levels are higher than average
-            today. Consider adjusting the nursery ventilation to improve sleep comfort.
+            <strong>Decision-support insight:</strong> {insightText}
           </p>
         </div>
       </div>

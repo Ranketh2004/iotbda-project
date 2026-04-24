@@ -1,0 +1,741 @@
+import nutritionCsvRaw from '../data/infant_cry_nutrition_data.csv?raw';
+
+const nowSec = () => Date.now() / 1000;
+
+/** Max cohort rows expanded from CSV (keeps merge + charts responsive). */
+const MAX_CSV_ROWS = 450;
+/** Cap synthetic alerts generated per CSV row. */
+const MAX_CRIES_PER_ROW = 10;
+/** Only use cohort diary dates in this window (UTC day span) so charts overlap recent buckets. */
+const COHORT_DATE_WINDOW_SEC = 21 * 86400;
+
+let _nutritionRowsCache = null;
+
+function parseCsvLine(line) {
+  const out = [];
+  let cur = '';
+  let i = 0;
+  while (i < line.length) {
+    const c = line[i];
+    if (c === '"') {
+      i++;
+      while (i < line.length) {
+        if (line[i] === '"' && line[i + 1] === '"') {
+          cur += '"';
+          i += 2;
+          continue;
+        }
+        if (line[i] === '"') {
+          i++;
+          break;
+        }
+        cur += line[i];
+        i++;
+      }
+      continue;
+    }
+    if (c === ',') {
+      out.push(cur);
+      cur = '';
+      i++;
+      continue;
+    }
+    cur += c;
+    i++;
+  }
+  out.push(cur);
+  return out;
+}
+
+function dayNoonUtcSec(dateStr) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr || '').trim());
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1;
+  const d = Number(m[3]);
+  return Date.UTC(y, mo, d, 12, 0, 0) / 1000;
+}
+
+export function parseNutritionCsvRows(raw) {
+  const lines = String(raw || '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return [];
+  const header = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+  const rows = [];
+  for (let li = 1; li < lines.length; li++) {
+    const cells = parseCsvLine(lines[li]);
+    if (cells.length < header.length) continue;
+    const o = {};
+    for (let i = 0; i < header.length; i++) {
+      o[header[i]] = cells[i] != null ? String(cells[i]).trim() : '';
+    }
+    rows.push(o);
+  }
+  return rows;
+}
+
+function getNutritionRows() {
+  if (_nutritionRowsCache) return _nutritionRowsCache;
+  _nutritionRowsCache = parseNutritionCsvRows(nutritionCsvRaw);
+  return _nutritionRowsCache;
+}
+
+function peakWindowHours(peak) {
+  const p = String(peak || '').toLowerCase();
+  if (p.includes('night')) return { start: 20, span: 5 };
+  if (p.includes('afternoon')) return { start: 13, span: 6 };
+  if (p.includes('morning')) return { start: 6, span: 6 };
+  return { start: 11, span: 8 };
+}
+
+function inferReasonFromCsvRow(row) {
+  const nutrition = String(row.estimated_nutrition_level || '').toLowerCase();
+  const meal = String(row.meal_timing_pattern || '').toLowerCase();
+  const peak = String(row.time_of_day_peak_cry || '').toLowerCase();
+  const intensity = String(row.cry_intensity_avg || '').toLowerCase();
+  const feeding = String(row.feeding_type || '').toLowerCase();
+  if (nutrition.includes('low') || (feeding.includes('formula') && String(row.water_intake || '').toLowerCase() === 'low')) {
+    return 'Hungry';
+  }
+  if (peak.includes('night') || (meal.includes('irregular') && intensity.includes('high'))) {
+    return 'Tired / Sleepy';
+  }
+  if (intensity.includes('high') || String(row.motion_activity_level || '').toLowerCase() === 'high') {
+    return 'Discomfort';
+  }
+  if (nutrition.includes('balanced') || nutrition.includes('high')) {
+    return 'Cry alert';
+  }
+  return 'Other';
+}
+
+function globalCsvMaxDaySec() {
+  const all = getNutritionRows();
+  let maxDay = 0;
+  for (const r of all) {
+    const t = dayNoonUtcSec(r.date);
+    if (t != null && t > maxDay) maxDay = t;
+  }
+  return maxDay;
+}
+
+/** Aligns the newest diary dates in the CSV to the current wall clock (for chart buckets). */
+function csvTimeShiftSec() {
+  const maxDay = globalCsvMaxDaySec();
+  if (!maxDay) return 0;
+  return nowSec() - maxDay - 3600 * 6;
+}
+
+function cohortRowsForAnalytics() {
+  const all = getNutritionRows();
+  if (!all.length) return [];
+  const maxDay = globalCsvMaxDaySec();
+  if (!maxDay) return [];
+  const cutoff = maxDay - COHORT_DATE_WINDOW_SEC;
+  const filtered = all.filter((r) => {
+    const t = dayNoonUtcSec(r.date);
+    return t != null && t >= cutoff && t <= maxDay;
+  });
+  filtered.sort((a, b) => (dayNoonUtcSec(a.date) || 0) - (dayNoonUtcSec(b.date) || 0));
+  return filtered.slice(-MAX_CSV_ROWS);
+}
+
+function motionFromLevel(level) {
+  const l = String(level || '').toLowerCase();
+  return l === 'high';
+}
+
+function pseudoEnvFromRow(row, idx) {
+  const freq = Math.min(MAX_CRIES_PER_ROW, Math.max(0, parseInt(row.cry_frequency, 10) || 0));
+  const inten = String(row.cry_intensity_avg || '').toLowerCase();
+  const baseHum = inten.includes('high') ? 72 : inten.includes('low') ? 62 : 66;
+  const hum = baseHum + (idx % 7) - 3;
+  const baseTemp = inten.includes('high') ? 27.4 : inten.includes('low') ? 26.2 : 26.8;
+  const temperature = baseTemp + (idx % 5) * 0.15;
+  const light_dark = peakWindowHours(row.time_of_day_peak_cry).start >= 18;
+  return { temperature, humidity: hum, motion: motionFromLevel(row.motion_activity_level), light_dark };
+}
+
+/**
+ * Sensor-shaped points from the nutrition cohort (for merge when Mongo is sparse).
+ */
+export function getCsvSensorHistory() {
+  const rows = cohortRowsForAnalytics();
+  if (!rows.length) return [];
+  const shift = csvTimeShiftSec();
+  const out = [];
+  let i = 0;
+  for (const r of rows) {
+    const noon = dayNoonUtcSec(r.date);
+    if (noon == null) continue;
+    const { start, span } = peakWindowHours(r.time_of_day_peak_cry);
+    const ts = noon + shift + (start + span / 2) * 3600;
+    const env = pseudoEnvFromRow(r, i);
+    out.push({ ...env, timestamp: ts });
+    i++;
+  }
+  return out.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function cryMessageFromRow(row, idx, total) {
+  const parts = [
+    `Cohort log ${row.baby_id || 'baby'} — cry ${idx + 1}/${total} on ${row.date || '?'}.`,
+    `Intensity ${row.cry_intensity_avg || 'n/a'}, feeding: ${row.feeding_type || 'n/a'} (${row.main_food_types || 'n/a'}).`,
+    `Nutrition signal: ${row.estimated_nutrition_level || 'n/a'}; peak fuss: ${row.time_of_day_peak_cry || 'n/a'}.`,
+  ];
+  return parts.join(' ');
+}
+
+/**
+ * Notification-shaped alerts expanded from daily cry_frequency + nutrition context.
+ */
+export function getCsvNotifications() {
+  const rows = cohortRowsForAnalytics();
+  if (!rows.length) return [];
+  const shift = csvTimeShiftSec();
+  const list = [];
+  for (const r of rows) {
+    const noon = dayNoonUtcSec(r.date);
+    if (noon == null) continue;
+    const { start, span } = peakWindowHours(r.time_of_day_peak_cry);
+    const base = noon + shift + start * 3600;
+    const n = Math.min(MAX_CRIES_PER_ROW, Math.max(1, parseInt(r.cry_frequency, 10) || 1));
+    const step = n <= 1 ? 0 : (span * 3600) / n;
+    for (let j = 0; j < n; j++) {
+      const ts = base + j * step + (String(r.baby_id || '').length % 120);
+      list.push({
+        timestamp: ts,
+        type: 'cry_alert',
+        message: cryMessageFromRow(r, j, n),
+      });
+    }
+  }
+  return list.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/**
+ * Structured cry-style events (one per cohort row) for richer merged timeline cards.
+ */
+export function getCsvCryEvents() {
+  const full = cohortRowsForAnalytics();
+  if (!full.length) return [];
+  const rows = full.slice(-Math.min(80, full.length));
+  const shift = csvTimeShiftSec();
+  const out = [];
+  let idx = 0;
+  for (const r of rows) {
+    const noon = dayNoonUtcSec(r.date);
+    if (noon == null) continue;
+    const { start, span } = peakWindowHours(r.time_of_day_peak_cry);
+    const ts = noon + shift + (start + span / 2) * 3600;
+    const reason = inferReasonFromCsvRow(r);
+    const freq = parseInt(r.cry_frequency, 10) || 0;
+    const intensity = String(r.cry_intensity_avg || '').toLowerCase();
+    const severity = freq >= 10 || intensity.includes('high') ? 'critical' : 'mild';
+    const confidence = severity === 'critical' ? 78 + (idx % 15) : 64 + (idx % 12);
+    const confidenceVariant = confidence >= 85 ? 'green' : confidence >= 75 ? 'yellow' : 'grey';
+    const peak = String(r.time_of_day_peak_cry || '');
+    const light_dark = peak.toLowerCase().includes('night');
+    out.push({
+      timestamp: ts,
+      reason,
+      severity,
+      confidence,
+      confidenceVariant,
+      footerLeft: `${r.feeding_type || 'Feed'} · ${r.main_food_types || 'foods'} · ${r.estimated_nutrition_level || 'nutrition'} · ${freq} cries logged`,
+      footerMid: `${r.day_type || ''} ${r.meal_timing_pattern || ''}`.trim() || null,
+      escalation: freq >= 11 ? 'triggered' : null,
+      motion: motionFromLevel(r.motion_activity_level) ? 'Detected' : 'None',
+      lightLabel: light_dark ? 'Dark' : 'Bright',
+      lightIcon: light_dark ? 'moon' : 'sun',
+    });
+    idx++;
+  }
+  return out.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+export function normalizeSensorRow(row) {
+  if (!row) return null;
+  const ts = row.timestamp != null ? Number(row.timestamp) : null;
+  return {
+    temperature: row.temperature != null ? Number(row.temperature) : null,
+    humidity: row.humidity != null ? Number(row.humidity) : null,
+    motion: Boolean(row.motion),
+    light_dark: Boolean(row.light_dark),
+    timestamp: ts,
+  };
+}
+
+/** Merge MongoDB history with CSV-derived cohort points; drop near-identical duplicates in a short time window. */
+export function mergeSensorHistory(mongoRows, csvRows, opts = {}) {
+  const windowSec = opts.dedupeWindowSec ?? 90;
+  const mongo = (mongoRows || []).map(normalizeSensorRow).filter((r) => r.timestamp != null);
+  const cohort = (csvRows || []).map(normalizeSensorRow).filter((r) => r.timestamp != null);
+  const combined = [...mongo, ...cohort].sort((a, b) => a.timestamp - b.timestamp);
+  const out = [];
+  for (const r of combined) {
+    const last = out[out.length - 1];
+    if (
+      last &&
+      Math.abs(last.timestamp - r.timestamp) < windowSec &&
+      last.temperature === r.temperature &&
+      last.humidity === r.humidity &&
+      last.motion === r.motion &&
+      last.light_dark === r.light_dark
+    ) {
+      continue;
+    }
+    out.push(r);
+  }
+  return out;
+}
+
+export function mergeNotifications(mongoList, csvList) {
+  const m = mongoList || [];
+  const s = csvList || [];
+  const map = new Map();
+  for (const n of [...m, ...s]) {
+    const ts = Number(n.timestamp);
+    if (!Number.isFinite(ts)) continue;
+    const key = `${ts.toFixed(0)}:${(n.message || '').slice(0, 40)}`;
+    if (!map.has(key)) map.set(key, { ...n, timestamp: ts });
+  }
+  return Array.from(map.values()).sort((a, b) => b.timestamp - a.timestamp);
+}
+
+const REASON_KEYWORDS = [
+  ['Hungry', ['hunger', 'hungry', 'feeding', 'feed']],
+  ['Tired / Sleepy', ['tired', 'sleep', 'sleepy', 'low energy']],
+  ['Discomfort', ['discomfort', 'warm', 'humidity', 'diaper', 'position', 'environmental']],
+];
+
+/** Canonical buckets for Cry reason lens + classification (order matters in infer). */
+export const LENS_REASON_SLUGS = [
+  'Hungry',
+  'Tired / Sleepy',
+  'Discomfort',
+  'Belly pain',
+  'Burping',
+  'Cold/Hot',
+  'Cry alert',
+  'Other',
+];
+
+const LENS_REASON_SET = new Set(LENS_REASON_SLUGS);
+
+/**
+ * Infer reason from free text (notifications, snippets). More specific patterns first.
+ */
+export function inferReasonFromMessage(message) {
+  const m = String(message || '').toLowerCase();
+  if (!m.trim()) return 'Cry alert';
+  if (/\bburp|\bbelch|\bgas\b/.test(m)) return 'Burping';
+  if (/belly|stomach|colic|cramp|abdominal|tummy/.test(m)) return 'Belly pain';
+  if (/cold|chill|fever|overheat|too\s*hot|too\s*cold|sweat(ing)?/.test(m)) return 'Cold/Hot';
+  for (const [label, keys] of REASON_KEYWORDS) {
+    if (keys.some((k) => m.includes(k))) return label;
+  }
+  return 'Cry alert';
+}
+
+/**
+ * Map a merged cry event to a canonical lens bucket (uses structured reason when trusted, else text).
+ */
+export function classifyCryReason(event) {
+  const r = (event?.reason || '').trim();
+  if (r && LENS_REASON_SET.has(r)) return r;
+  const text = String(event?.rawMessage ?? event?.footerLeft ?? event?.message ?? '');
+  if (text) {
+    const inf = inferReasonFromMessage(text);
+    if (LENS_REASON_SET.has(inf)) return inf;
+  }
+  if (r) {
+    const inf2 = inferReasonFromMessage(r);
+    if (LENS_REASON_SET.has(inf2)) return inf2;
+    return 'Other';
+  }
+  return 'Cry alert';
+}
+
+/** Bottom grid in Cry reason lens: slug → display label (everything except HUNGRY / TIRED top bars). */
+export const LENS_GRID_ORDER = [
+  ['Discomfort', 'DISCOMFORT'],
+  ['Belly pain', 'BELLY PAIN'],
+  ['Burping', 'BURPING'],
+  ['Cold/Hot', 'COLD/HOT'],
+  ['Cry alert', 'CRY ALERT'],
+  ['Other', 'OTHER'],
+];
+
+/**
+ * Per-bucket counts for all lens categories (for % breakdown).
+ */
+export function lensReasonBreakdown(events) {
+  const counts = Object.fromEntries(LENS_REASON_SLUGS.map((k) => [k, 0]));
+  const list = events || [];
+  for (const e of list) {
+    const c = classifyCryReason(e);
+    if (counts[c] !== undefined) counts[c]++;
+    else counts['Other']++;
+  }
+  const total = list.length;
+  return { counts, total };
+}
+
+/** Histogram-shaped list for `fromDistribution` (includes zeros). */
+export function lensReasonHistogram(events) {
+  const { counts } = lensReasonBreakdown(events);
+  return LENS_REASON_SLUGS.map((reason) => ({ reason, count: counts[reason] }));
+}
+function nearestSensorAt(sensors, ts) {
+  if (!sensors.length) return null;
+  let best = sensors[0];
+  let bestD = Math.abs(sensors[0].timestamp - ts);
+  for (let i = 1; i < sensors.length; i++) {
+    const d = Math.abs(sensors[i].timestamp - ts);
+    if (d < bestD) {
+      bestD = d;
+      best = sensors[i];
+    }
+  }
+  return best;
+}
+
+export function enrichNotificationAsEvent(n, sensors) {
+  const ts = Number(n.timestamp);
+  const sn = nearestSensorAt(sensors, ts);
+  const reason = inferReasonFromMessage(n.message);
+  const severity =
+    /cluster|third|sustained|spike|warm|discomfort|intensity\s+high/i.test(String(n.message)) ? 'critical' : 'mild';
+  const confidence =
+    severity === 'critical' ? 72 + Math.floor((ts % 17) % 18) : 62 + Math.floor((ts % 11) % 12);
+  const confidenceVariant =
+    confidence >= 85 ? 'green' : confidence >= 75 ? 'yellow' : 'grey';
+  const tempStr =
+    sn?.temperature != null ? `${Number(sn.temperature).toFixed(0)}°C` : '—';
+  const humStr = sn?.humidity != null ? `${Number(sn.humidity).toFixed(0)}%` : '—';
+  const lightLabel = sn ? (sn.light_dark ? 'Dark' : 'Bright') : '—';
+  const lightIcon = sn?.light_dark ? 'moon' : 'sun';
+  return {
+    id: `n-${ts}`,
+    reason,
+    severity,
+    confidence,
+    confidenceVariant,
+    timestamp: ts,
+    icon: reason.includes('Tired') ? 'moon' : reason.includes('Discomfort') ? 'circle' : 'frown',
+    iconTone: reason.includes('Tired') ? 'yellow' : reason.includes('Discomfort') ? 'grey' : 'blue',
+    temp: tempStr,
+    humidity: humStr,
+    light: lightLabel,
+    lightIcon,
+    footerLeft: String(n.message || '').slice(0, 120),
+    footerMid: null,
+    escalation: /cluster|third alert|escalat|triggered/i.test(String(n.message)) ? 'triggered' : null,
+    motion: sn?.motion ? 'Detected' : 'None',
+    rawMessage: n.message != null ? String(n.message) : '',
+    message: n.message != null ? String(n.message) : '',
+  };
+}
+
+export function mergeCryEvents(csvStructuredEvents, notifications, sensors) {
+  const fromCsv = (csvStructuredEvents || []).map((e) => {
+    const ts = Number(e.timestamp);
+    const sn = nearestSensorAt(sensors, ts);
+    const iconTone =
+      e.iconTone ||
+      (e.reason?.includes('Tired') ? 'yellow' : e.reason?.includes('Discomfort') ? 'grey' : 'blue');
+    return {
+      id: `c-${ts}-${e.reason}`,
+      reason: e.reason,
+      severity: e.severity,
+      confidence: e.confidence,
+      confidenceVariant: e.confidenceVariant,
+      timestamp: ts,
+      icon: e.reason?.includes('Tired') ? 'moon' : e.reason?.includes('Discomfort') ? 'circle' : 'frown',
+      iconTone,
+      temp: sn?.temperature != null ? `${Number(sn.temperature).toFixed(0)}°C` : '—',
+      humidity: sn?.humidity != null ? `${Number(sn.humidity).toFixed(0)}%` : '—',
+      light: e.lightLabel ?? (sn?.light_dark ? 'Dark' : 'Bright'),
+      lightIcon: e.lightIcon || (sn?.light_dark ? 'moon' : 'sun'),
+      footerLeft: e.footerLeft,
+      footerMid: e.footerMid,
+      escalation: e.escalation,
+      motion: e.motion,
+      rawMessage: null,
+    };
+  });
+  const fromMongo = (notifications || []).map((n) => enrichNotificationAsEvent(n, sensors));
+  const byTs = new Map();
+  for (const ev of [...fromMongo, ...fromCsv]) {
+    const k = `${ev.timestamp.toFixed(0)}-${ev.reason}`;
+    if (!byTs.has(k)) byTs.set(k, ev);
+  }
+  return Array.from(byTs.values()).sort((a, b) => b.timestamp - a.timestamp);
+}
+
+export function formatEventTime(ts) {
+  try {
+    const d = new Date(ts * 1000);
+    return d.toLocaleString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
+
+export function reasonHistogram(events) {
+  const { counts } = lensReasonBreakdown(events);
+  return Object.entries(counts)
+    .map(([reason, count]) => ({ reason, count }))
+    .filter((x) => x.count > 0)
+    .sort((a, b) => b.count - a.count);
+}
+
+export function cryAlertsLast24h(events) {
+  const t0 = nowSec() - 86400;
+  return (events || []).filter((e) => e.timestamp >= t0).length;
+}
+
+export function avgHumidity(sensors) {
+  const vals = (sensors || []).map((s) => s.humidity).filter((v) => v != null && !Number.isNaN(v));
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+export function avgTemp(sensors) {
+  const vals = (sensors || []).map((s) => s.temperature).filter((v) => v != null && !Number.isNaN(v));
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+export function buildStoryChapters({ sensors, events, liveTemp, liveHum, cryStatus }) {
+  const chapters = [];
+  const last24 = (sensors || []).filter((s) => s.timestamp >= nowSec() - 86400);
+  const hum = avgHumidity(last24.length ? last24 : sensors);
+  const temp = avgTemp(last24.length ? last24 : sensors);
+  const top = reasonHistogram(events)[0];
+
+  chapters.push({
+    title: 'Opening scene',
+    body: `Over the last few days we combined your MongoDB nursery stream with the infant cry & nutrition cohort CSV (aligned to this week for charts)${liveTemp != null ? ` (${Number(liveTemp).toFixed(1)}°C now` : ''}${
+      liveHum != null ? `, ${Number(liveHum).toFixed(0)}% humidity` : ''
+    }${liveTemp != null || liveHum != null ? ')' : ''}. The timeline highlights when cries line up with motion or room shifts.`,
+  });
+
+  if (top) {
+    chapters.push({
+      title: 'Pattern',
+      body: `The leading interpreted reason is “${top.reason}” (${top.count} recorded events in the merged window). Use filters on the Analytics tab to compare critical versus mild episodes.`,
+    });
+  }
+
+  if (hum != null && hum > 70) {
+    chapters.push({
+      title: 'Environment beat',
+      body: `Average humidity is around ${hum.toFixed(
+        0,
+      )}% — on the high side for Colombo-area nurseries. Ventilation or a compact dehumidifier during sleep blocks often reduces false “discomfort” spikes.`,
+    });
+  } else if (hum != null) {
+    chapters.push({
+      title: 'Environment beat',
+      body: `Humidity has stayed near ${hum.toFixed(
+        0,
+      )}%, which is comfortable for most infants. Keep monitoring after weather swings.`,
+    });
+  }
+
+  if (cryStatus?.cry_detected) {
+    chapters.push({
+      title: 'Right now',
+      body: `Live model output: ${String(cryStatus.message || 'Activity detected').slice(0, 160)}`,
+    });
+  } else {
+    chapters.push({
+      title: 'Right now',
+      body: 'No active cry flag from the live stream. Historical bars still reflect MongoDB plus the nutrition cohort for planning.',
+    });
+  }
+
+  return chapters;
+}
+
+export function buildDecisionSupport({ sensors, events }) {
+  const actions = [];
+  const hum = avgHumidity(sensors);
+  const last24ev = (events || []).filter((e) => e.timestamp >= nowSec() - 86400);
+  const critical = last24ev.filter((e) => e.severity === 'critical').length;
+
+  if (hum != null && hum > 71) {
+    actions.push({
+      priority: 'high',
+      title: 'Humidity comfort',
+      detail:
+        'Aim for air exchange before nap: cracked window with fan (not on baby) or A/C dry mode 20 minutes.',
+    });
+  }
+  if (critical >= 3) {
+    actions.push({
+      priority: 'high',
+      title: 'Escalation readiness',
+      detail:
+        'Several critical-tagged cries in 24h. Confirm feeding log and consider shortening wake windows by 10–15 minutes.',
+    });
+  }
+  const hungry = (events || []).filter((e) => String(e.reason).includes('Hungry')).length;
+  if (hungry >= 4) {
+    actions.push({
+      priority: 'medium',
+      title: 'Feeding rhythm',
+      detail:
+        'Hunger-tagged cries cluster. Try proactive feeds 15 minutes before the usual fuss window.',
+    });
+  }
+  if (!actions.length) {
+    actions.push({
+      priority: 'low',
+      title: 'Maintain baseline',
+      detail: 'Signals look stable. Keep logging alerts for one more week to tighten seasonal baselines.',
+    });
+  }
+  return actions;
+}
+
+export function exploratoryAgentReply(question, ctx) {
+  const q = String(question || '').trim().toLowerCase();
+  const { events, sensors, topReason, alerts24, avgHum, avgTmp } = ctx;
+  if (!q) {
+    return 'Ask about humidity, temperature, cry counts, top reasons, or what to do next — I use merged MongoDB readings plus the infant cry & nutrition CSV on this device.';
+  }
+  if (/help|^what can|suggest|recommend|should i/.test(q)) {
+    return buildDecisionSupport({ sensors, events })
+      .map((a) => `• ${a.title}: ${a.detail}`)
+      .join('\n');
+  }
+  if (/humid/.test(q)) {
+    return avgHum != null
+      ? `Blended average humidity is about ${avgHum.toFixed(1)}% across the visible series. ${
+          avgHum > 70 ? 'That is elevated — prioritize airflow in the sleep block.' : 'That sits in a typical comfort band.'
+        }`
+      : 'No humidity samples in the merged window yet.';
+  }
+  if (/temp|warm|cool|heat/.test(q)) {
+    return avgTmp != null
+      ? `Mean temperature in the merged history is near ${avgTmp.toFixed(1)}°C. Pair with humidity when judging heat stress.`
+      : 'No temperature samples in the merged window yet.';
+  }
+  if (/how many|count|alert|cry/.test(q)) {
+    return `Roughly ${events?.length ?? 0} merged cry-style events in the loaded window, with ${alerts24} in the last 24 hours. Top interpreted reason: ${topReason || 'n/a'}.`;
+  }
+  if (/reason|pattern|hungry|tired|discomfort/.test(q)) {
+    const hist = reasonHistogram(events);
+    if (!hist.length) return 'No labeled reasons in the merged set yet.';
+    return `Reason mix: ${hist.map((h) => `${h.reason} (${h.count})`).join(', ')}.`;
+  }
+  if (/summarize|critical|mild|severity/.test(q)) {
+    const c = (events || []).filter((e) => e.severity === 'critical').length;
+    const m = (events || []).filter((e) => e.severity === 'mild').length;
+    return `Severity split in the merged window: ${c} critical, ${m} mild. Open Analytics filters to isolate each band.`;
+  }
+  if (/mongo|database|live|real|csv|cohort/.test(q)) {
+    return 'Live rows from your CryGuard API (MongoDB) are merged with infant_cry_nutrition_data.csv — daily cry counts and feeding fields are expanded into alerts and aligned to the current week for charting.';
+  }
+  return `Try: “What’s average humidity?”, “How many cries last 24h?”, or “What should I do?” — Top reason right now: ${topReason || 'unknown'}.`;
+}
+
+export function buildAgentContext(mergedSensors, mergedEvents) {
+  const hist = reasonHistogram(mergedEvents);
+  return {
+    events: mergedEvents,
+    sensors: mergedSensors,
+    topReason: hist[0]?.reason,
+    alerts24: cryAlertsLast24h(mergedEvents),
+    avgHum: avgHumidity(mergedSensors),
+    avgTmp: avgTemp(mergedSensors),
+  };
+}
+
+/** Timeline rows: cries + motion transitions from sensor series */
+export function buildActivityTimelineItems(sensors, notifications) {
+  const items = [];
+  const sns = [...(sensors || [])].filter((s) => s.timestamp != null).sort((a, b) => b.timestamp - a.timestamp);
+  for (const n of notifications || []) {
+    items.push({
+      id: `cry-${n.timestamp}`,
+      title: inferReasonFromMessage(n.message),
+      meta: `${formatEventTime(n.timestamp)} · ${String(n.message || '').slice(0, 72)}`,
+      kind: 'cry',
+      timestamp: n.timestamp,
+    });
+  }
+  let prevMotion = null;
+  for (const s of sns.slice(0, 24)) {
+    if (prevMotion === null) prevMotion = s.motion;
+    if (prevMotion !== s.motion) {
+      items.push({
+        id: `mot-${s.timestamp}`,
+        title: s.motion ? 'Motion picked up' : 'Settled — low motion',
+        meta: formatEventTime(s.timestamp),
+        kind: 'motion',
+        timestamp: s.timestamp,
+      });
+      prevMotion = s.motion;
+    }
+  }
+  items.sort((a, b) => b.timestamp - a.timestamp);
+  return items.slice(0, 12);
+}
+
+export function computeAnalyticsSummary(events, sensors) {
+  const hist = reasonHistogram(events);
+  const top = hist[0]?.reason || '—';
+  const topCount = hist[0]?.count ?? 0;
+  const totalLabeled = hist.reduce((s, h) => s + h.count, 0) || 1;
+  const topShare = Math.round((topCount / totalLabeled) * 100);
+  const alerts24 = cryAlertsLast24h(events);
+  const prev24 = (events || []).filter((e) => {
+    const t = e.timestamp;
+    return t < nowSec() - 86400 && t >= nowSec() - 172800;
+  }).length;
+  const delta = prev24 > 0 ? Math.round(((alerts24 - prev24) / prev24) * 100) : alerts24 > 0 ? 100 : 0;
+  const avgHum = avgHumidity(sensors);
+  return {
+    topReason: top,
+    topTrend: `${topShare}% of labeled events in the merged window`,
+    alertsToday: alerts24,
+    alertsTrend: delta > 0 ? 'up' : delta < 0 ? 'down' : 'neutral',
+    alertsTrendLabel:
+      prev24 === 0 && alerts24 === 0
+        ? 'No prior-day slice to compare'
+        : `${Math.abs(delta)}% vs prior 24h`,
+    avgResponseLabel: avgHum != null && avgHum > 70 ? 'Ventilation priority' : 'Comfort band OK',
+    avgResponseDetail:
+      avgHum != null
+        ? `Mean humidity ${avgHum.toFixed(0)}% across merged readings`
+        : 'Not enough humidity samples',
+  };
+}
+
+export function hourlyCryBuckets(events, hours = 48) {
+  const t0 = nowSec() - hours * 3600;
+  const end = nowSec();
+  const bins = Array.from({ length: hours }, (_, i) => ({
+    label: `${i}h`,
+    count: 0,
+    tStart: t0 + i * 3600,
+  }));
+  for (const e of events || []) {
+    if (e.timestamp < t0 || e.timestamp > end) continue;
+    const idx = Math.min(hours - 1, Math.max(0, Math.floor((e.timestamp - t0) / 3600)));
+    bins[idx].count += 1;
+  }
+  return bins;
+}

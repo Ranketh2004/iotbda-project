@@ -13,6 +13,7 @@ from routes import auth_routes
 from routes import sensor_routes
 from routes import ws_routes
 from routes import audio_stream_routes
+from routes import care_log_routes
 from services.database import database
 
 # Configure logging
@@ -56,6 +57,7 @@ app.mount(
 )
 app.include_router(ws_routes.router)
 app.include_router(audio_stream_routes.router)
+app.include_router(care_log_routes.router)
 
 # Serve Vite build so client-side routes (/login, /dashboard) work when using the API port (8080)
 if FRONTEND_DIST.is_dir() and (FRONTEND_DIST / "index.html").is_file():
@@ -133,4 +135,6 @@ async def spa_fallback(full_path: str):
 
 if __name__ == "__main__":
     logger.info("Starting Uvicorn server...")
-    uvicorn.run("app:app", host="0.0.0.0", port=8080, reload=True)
+    # Run the in-memory app object directly to avoid module-resolution mismatches
+    # (which can happen with string imports like "app:app" on Windows shells).
+    uvicorn.run(app, host="0.0.0.0", port=8080, reload=False)
