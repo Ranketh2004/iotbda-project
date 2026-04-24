@@ -37,7 +37,12 @@ class Database:
 
             # Create indexes for efficient queries
             await self.db.sensor_data.create_index("timestamp", unique=False)
+            await self.db.sensor_data.create_index([("user_id", 1), ("timestamp", -1)], unique=False)
+            await self.db.sensor_data.create_index([("logged_user_id", 1), ("timestamp", -1)], unique=False)
             await self.db.notifications.create_index("timestamp", unique=False)
+            await self.db.notifications.create_index([("user_id", 1), ("timestamp", -1)], unique=False)
+            await self.db.notifications.create_index([("logged_user_id", 1), ("timestamp", -1)], unique=False)
+            await self.db.cry_status.create_index([("user_id", 1), ("_type", 1)], unique=True)
             await self.db.users.create_index("email", unique=True)
             await self.db.users.create_index("phone", unique=True, sparse=True)
             await self.db.parent_care_logs.create_index(
@@ -59,24 +64,32 @@ class Database:
 
     # ── Sensor Data ──────────────────────────────────────────
 
-    async def save_sensor_data(self, data: dict):
+    async def save_sensor_data(self, data: dict, user_id: str | None = None):
         """Insert a sensor reading document into the sensor_data collection."""
-        result = await self.db.sensor_data.insert_one(data)
+        payload = dict(data)
+        effective_user_id = user_id or payload.get("user_id") or payload.get("logged_user_id")
+        if effective_user_id:
+            payload["user_id"] = str(effective_user_id)
+            payload["logged_user_id"] = str(effective_user_id)
+        result = await self.db.sensor_data.insert_one(payload)
         logger.debug(f"Sensor data saved with id: {result.inserted_id}")
         return result.inserted_id
 
-    async def get_latest_sensor_data(self) -> dict | None:
+    async def get_latest_sensor_data(self, user_id: str | None = None) -> dict | None:
         """Get the most recent sensor reading."""
+        query = {"user_id": user_id} if user_id else {}
         doc = await self.db.sensor_data.find_one(
+            query,
             sort=[("timestamp", -1)]
         )
         if doc:
             doc["_id"] = str(doc["_id"])  # Convert ObjectId to string for JSON
         return doc
 
-    async def get_sensor_history(self, limit: int = 50) -> list:
+    async def get_sensor_history(self, limit: int = 50, user_id: str | None = None) -> list:
         """Get recent sensor readings."""
-        cursor = self.db.sensor_data.find().sort("timestamp", -1).limit(limit)
+        query = {"user_id": user_id} if user_id else {}
+        cursor = self.db.sensor_data.find(query).sort("timestamp", -1).limit(limit)
         docs = await cursor.to_list(length=limit)
         for doc in docs:
             doc["_id"] = str(doc["_id"])
@@ -84,15 +97,21 @@ class Database:
 
     # ── Notifications ────────────────────────────────────────
 
-    async def save_notification(self, notification: dict):
+    async def save_notification(self, notification: dict, user_id: str | None = None):
         """Save a cry alert notification."""
-        result = await self.db.notifications.insert_one(notification)
+        payload = dict(notification)
+        effective_user_id = user_id or payload.get("user_id") or payload.get("logged_user_id")
+        if effective_user_id:
+            payload["user_id"] = str(effective_user_id)
+            payload["logged_user_id"] = str(effective_user_id)
+        result = await self.db.notifications.insert_one(payload)
         logger.debug(f"Notification saved with id: {result.inserted_id}")
         return result.inserted_id
 
-    async def get_notifications(self, limit: int = 50) -> list:
+    async def get_notifications(self, limit: int = 50, user_id: str | None = None) -> list:
         """Get recent notifications."""
-        cursor = self.db.notifications.find().sort("timestamp", -1).limit(limit)
+        query = {"user_id": user_id} if user_id else {}
+        cursor = self.db.notifications.find(query).sort("timestamp", -1).limit(limit)
         docs = await cursor.to_list(length=limit)
         for doc in docs:
             doc["_id"] = str(doc["_id"])
@@ -100,20 +119,24 @@ class Database:
 
     # ── Cry Status ───────────────────────────────────────────
 
-    async def save_cry_status(self, status: dict):
+    async def save_cry_status(self, status: dict, user_id: str | None = None):
         """Save/update the latest cry detection status."""
+        scope_user_id = user_id or "__global__"
         await self.db.cry_status.replace_one(
-            {"_type": "latest"},
-            {**status, "_type": "latest"},
+            {"_type": "latest", "user_id": scope_user_id},
+            {**status, "_type": "latest", "user_id": scope_user_id},
             upsert=True,
         )
 
-    async def get_cry_status(self) -> dict | None:
+    async def get_cry_status(self, user_id: str | None = None) -> dict | None:
         """Get the latest cry status."""
-        doc = await self.db.cry_status.find_one({"_type": "latest"})
+        scope_user_id = user_id or "__global__"
+        doc = await self.db.cry_status.find_one({"_type": "latest", "user_id": scope_user_id})
         if doc:
             doc["_id"] = str(doc["_id"])
             doc.pop("_type", None)
+            if doc.get("user_id") == "__global__":
+                doc.pop("user_id", None)
         return doc
 
     # ── ESP Status ───────────────────────────────────────────
@@ -258,16 +281,32 @@ class Database:
             doc["_id"] = str(doc["_id"])
         return doc
 
-    async def query_sensor_data_range(self, start_ts: float, end_ts: float, limit: int = 30000) -> list:
+    async def query_sensor_data_range(
+        self,
+        start_ts: float,
+        end_ts: float,
+        limit: int = 30000,
+        user_id: str | None = None,
+    ) -> list:
         """Sensor rows whose numeric timestamp falls in [start_ts, end_ts)."""
         q = {"timestamp": {"$gte": start_ts, "$lt": end_ts}}
+        if user_id:
+            q["user_id"] = user_id
         cursor = self.db.sensor_data.find(q, {"timestamp": 1, "motion": 1, "_id": 0}).sort("timestamp", 1).limit(
             limit
         )
         return await cursor.to_list(length=limit)
 
-    async def query_notifications_range(self, start_ts: float, end_ts: float, limit: int = 8000) -> list:
+    async def query_notifications_range(
+        self,
+        start_ts: float,
+        end_ts: float,
+        limit: int = 8000,
+        user_id: str | None = None,
+    ) -> list:
         q = {"timestamp": {"$gte": start_ts, "$lt": end_ts}}
+        if user_id:
+            q["user_id"] = user_id
         cursor = (
             self.db.notifications.find(q, {"timestamp": 1, "message": 1, "type": 1, "_id": 0})
             .sort("timestamp", 1)

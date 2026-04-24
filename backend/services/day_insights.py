@@ -104,13 +104,14 @@ async def compute_day_insights(
     *,
     entry_date: str,
     tz_name: str,
+    user_id: str | None = None,
     sensor_limit: int = 30000,
     notif_limit: int = 8000,
 ) -> dict[str, Any]:
     start_ts, end_ts = day_unix_bounds(entry_date, tz_name)
 
-    sensor_docs = await db.query_sensor_data_range(start_ts, end_ts, limit=sensor_limit)
-    notif_docs = await db.query_notifications_range(start_ts, end_ts, limit=notif_limit)
+    sensor_docs = await db.query_sensor_data_range(start_ts, end_ts, limit=sensor_limit, user_id=user_id)
+    notif_docs = await db.query_notifications_range(start_ts, end_ts, limit=notif_limit, user_id=user_id)
 
     cry_ts: list[float] = []
     intensity_scores: list[float] = []

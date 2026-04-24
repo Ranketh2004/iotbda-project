@@ -32,13 +32,14 @@ async def detect_cry_endpoint(request: Request):
         features, audio_rms = preprocess_audio(audio_bytes)
 
         # 2. Skip model on near-silence — normalized MFCC of noise looks like fake "structure"
+        prediction_meta = {}
         if audio_rms < settings.MIN_AUDIO_RMS:
             logger.info(
                 f"No cry: below energy gate (audio_rms={audio_rms:.6f} < {settings.MIN_AUDIO_RMS})"
             )
             is_crying, cry_probability = False, 0.0
         else:
-            is_crying, cry_probability = cry_service.detect_cry(features)
+            is_crying, cry_probability, prediction_meta = cry_service.detect_cry(features)
 
         # 3. Combine mic + PIR; cry_detected / alerts only when both agree
         result = {
@@ -48,6 +49,8 @@ async def detect_cry_endpoint(request: Request):
         }
         if cry_probability is not None:
             result["cry_probability"] = cry_probability
+        if prediction_meta:
+            result.update(prediction_meta)
 
         result = state_manager.merge_mic_cry_with_pir(is_crying, result)
 

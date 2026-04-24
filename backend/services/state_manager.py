@@ -38,6 +38,7 @@ class StateManager:
             "message": "No data yet",
             "timestamp": None,
         }
+        self.active_user_id: str | None = None
 
         # Notification history (in-memory cache, last 50)
         self.notifications: List[Dict[str, Any]] = []
@@ -146,8 +147,11 @@ class StateManager:
             merged.setdefault("message", "No cry detected")
         return merged
 
-    async def update_sensor_data(self, data: dict):
+    async def update_sensor_data(self, data: dict, user_id: str | None = None):
         from services.database import database
+
+        if user_id:
+            self.active_user_id = user_id
 
         self.sensor_data = {
             "temperature": data.get("temperature"),
@@ -156,11 +160,18 @@ class StateManager:
             "light_dark": self._coerce_bool(data.get("light_dark", False), default=False),
             "timestamp": time.time(),
         }
+        cry_label = self.cry_status.get("cry_label")
+        if cry_label:
+            self.sensor_data["cry_label"] = cry_label
+        if self.cry_status.get("prediction_index") is not None:
+            self.sensor_data["prediction_index"] = self.cry_status.get("prediction_index")
+        if self.cry_status.get("max_prob") is not None:
+            self.sensor_data["max_prob"] = self.cry_status.get("max_prob")
         self.update_esp_status(connected=True)
 
         # Persist to MongoDB
         try:
-            await database.save_sensor_data(self.sensor_data.copy())
+            await database.save_sensor_data(self.sensor_data.copy(), user_id=self.active_user_id)
             await database.save_esp_status(True, self.esp_last_seen)
         except Exception as e:
             logger.error(f"Failed to save sensor data to MongoDB: {e}")
@@ -172,14 +183,17 @@ class StateManager:
             "esp_connected": True,
         })
 
-    async def update_cry_status(self, result: dict):
+    async def update_cry_status(self, result: dict, user_id: str | None = None):
         from services.database import database
+
+        if user_id:
+            self.active_user_id = user_id
 
         self.cry_status = result
 
         # Persist to MongoDB
         try:
-            await database.save_cry_status(result.copy())
+            await database.save_cry_status(result.copy(), user_id=self.active_user_id)
         except Exception as e:
             logger.error(f"Failed to save cry status to MongoDB: {e}")
 
@@ -189,13 +203,16 @@ class StateManager:
                 "message": result.get("message", "Baby is crying!"),
                 "timestamp": time.time(),
             }
+            cry_label = result.get("cry_label")
+            if cry_label:
+                notification["cry_label"] = cry_label
             self.notifications.append(notification)
             # Keep last 50
             self.notifications = self.notifications[-50:]
 
             # Persist notification to MongoDB
             try:
-                await database.save_notification(notification.copy())
+                await database.save_notification(notification.copy(), user_id=self.active_user_id)
             except Exception as e:
                 logger.error(f"Failed to save notification to MongoDB: {e}")
 

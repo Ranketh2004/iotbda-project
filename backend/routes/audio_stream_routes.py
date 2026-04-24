@@ -53,6 +53,7 @@ async def run_cry_detection(pcm_data: bytes):
         # Preprocess and detect (run in thread to not block event loop)
         loop = asyncio.get_event_loop()
         features, audio_rms = await loop.run_in_executor(None, preprocess_audio, wav_bytes)
+        prediction_meta = {}
         if audio_rms < settings.MIN_AUDIO_RMS:
             logger.info(
                 f"[CryDetect] Skipping model: below energy gate (rms={audio_rms:.6f})"
@@ -60,7 +61,7 @@ async def run_cry_detection(pcm_data: bytes):
             is_crying = False
             cry_probability = 0.0
         else:
-            is_crying, cry_probability = await loop.run_in_executor(None, cry_service.detect_cry, features)
+            is_crying, cry_probability, prediction_meta = await loop.run_in_executor(None, cry_service.detect_cry, features)
 
         result = {
             "message": "Baby is crying! 🚨" if is_crying else "No cry detected",
@@ -70,6 +71,8 @@ async def run_cry_detection(pcm_data: bytes):
         }
         if cry_probability is not None:
             result["cry_probability"] = cry_probability
+        if prediction_meta:
+            result.update(prediction_meta)
         result = state_manager.merge_mic_cry_with_pir(is_crying, result)
 
         # Update state manager (broadcasts to main /ws clients)

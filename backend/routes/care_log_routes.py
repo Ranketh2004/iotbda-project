@@ -162,7 +162,7 @@ async def care_log_suggestions(
     ed = (entry_date or "").strip() or _today_iso(local)
     if not _DATE_RE.match(ed):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="entry_date must be YYYY-MM-DD")
-    return await compute_day_insights(database, entry_date=ed, tz_name=tz)
+    return await compute_day_insights(database, entry_date=ed, tz_name=tz, user_id=user_id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, include_in_schema=False)
