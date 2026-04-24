@@ -6,7 +6,7 @@ import random
 
 # Must match ESP32 audio: 3 seconds, 16kHz, mono, 16-bit
 SAMPLE_RATE = 16000
-DURATION = 3.0  # seconds — matches ESP32's AUDIO_SEND_SECONDS
+DURATION = 3.0  # seconds, matches ESP32's AUDIO_SEND_SECONDS
 
 
 def create_dummy_wav(filename, duration, sample_rate, frequencies, amplitude=10000, noise_level=800):

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Baby, Heart, Sparkles } from 'lucide-react';
 
-/** Rounded five-point star — yellow / blue / pink */
+/** Rounded five-point star, yellow / blue / pink */
 function StarSoft({ className, fill }) {
   return (
     <svg className={className} viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -17,7 +17,7 @@ function StarSoft({ className, fill }) {
   );
 }
 
-/** Baby bottle — soft pastel fill */
+/** Baby bottle, soft pastel fill */
 function BottleIcon({ className }) {
   return (
     <svg className={className} viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -43,7 +43,7 @@ function BottleIcon({ className }) {
   );
 }
 
-/** Pacifier — nursery accent */
+/** Pacifier, nursery accent */
 function PacifierIcon({ className }) {
   return (
     <svg className={className} viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">

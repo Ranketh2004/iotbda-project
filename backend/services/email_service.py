@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def send_reset_email(to_email: str, reset_link: str) -> bool:
     """Send a password reset email via SMTP. Returns True on success."""
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        logger.warning("SMTP not configured — skipping email to %s", to_email)
+        logger.warning("SMTP not configured, skipping email to %s", to_email)
         return False
 
     msg = MIMEMultipart("alternative")
@@ -26,7 +26,7 @@ def send_reset_email(to_email: str, reset_link: str) -> bool:
         f"{reset_link}\n\n"
         f"This link expires in 15 minutes.\n\n"
         f"If you didn't request this, you can safely ignore this email.\n\n"
-        f"— Infant Cry Guard Team"
+        f"- Infant Cry Guard Team"
     )
 
     html = f"""\
@@ -46,7 +46,7 @@ def send_reset_email(to_email: str, reset_link: str) -> bool:
         This link expires in 15 minutes. If you didn't request this, ignore this email.
       </p>
       <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
-      <p style="font-size: 0.8rem; color: #999;">— Infant Cry Guard Team</p>
+      <p style="font-size: 0.8rem; color: #999;">- Infant Cry Guard Team</p>
     </div>
     """
 

@@ -19,11 +19,12 @@ const DEFAULT_ALERTS = [
 ];
 
 const DESCRIPTION = {
-  lead:
-    'High-priority environment and device notices appear here alongside your nursery overview. They are separate from the activity timeline (cry + motion history).',
-  detail:
-    'Urgent cry SMS still follows your escalation order (Parent 1 → timed guardians, Parent 2 manual). Clearing an alert below only hides it on this browser — it does not change SMS settings or MongoDB data.',
-};
+  // lead:
+  //   'High-priority environment and device notices appear here alongside your nursery overview. They are separate from the activity timeline (cry + motion history).',
+  // detail:
+  //   'Urgent cry SMS still follows your escalation order (Parent 1 → timed guardians, Parent 2 manual). Clearing an alert below only hides it on this browser, it does not change SMS settings or MongoDB data.',
+
+  };
 
 function loadDismissed() {
   try {

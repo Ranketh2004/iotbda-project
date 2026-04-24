@@ -1,5 +1,5 @@
 """
-Parent daily care log — fields aligned with infant_cry_nutrition_data.csv.
+Parent daily care log, fields aligned with infant_cry_nutrition_data.csv.
 Preferred submission window: 20:00–22:00 in the client's timezone (informational + stored flag).
 Submissions are accepted at any time.
 """
@@ -154,7 +154,7 @@ async def care_log_suggestions(
     entry_date: str | None = None,
 ):
     """
-    Autofill hints for the daily care form: cry count, peak time, motion band, intensity —
+    Autofill hints for the daily care form: cry count, peak time, motion band, intensity -
     derived from MongoDB `notifications` (cry alerts) and `sensor_data` for the diary day in `tz`.
     """
     _decode_bearer_user_id(authorization)

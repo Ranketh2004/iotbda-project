@@ -11,7 +11,7 @@ export default function ExploratoryChatPanel({
     {
       role: 'assistant',
       content:
-        'Hi! I have access to your live nursery data — sensor readings, cry alerts, and care logs. Ask me anything about your baby\'s environment or patterns.',
+        'Hi! I have access to your live nursery data, sensor readings, cry alerts, and care logs. Ask me anything about your baby\'s environment or patterns.',
     },
   ]);
   const [input, setInput] = useState('');

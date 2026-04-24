@@ -36,7 +36,7 @@ const DEFAULT_DESCRIPTION = {
   lead:
     'A single feed of cry-related alerts and motion changes so you can see what happened recently at a glance.',
   // detail:
-  //   'Live cry rows come from your account’s MongoDB notifications; motion “edges” are derived from merged sensor history (device + demo cohort). CSV cohort lines are synthetic diary samples aligned to the current week for charts — they are not new server writes. Use the checkboxes to choose entries, then remove them from this view only (hidden on this browser until you restore them).',
+  //   'Live cry rows come from your account’s MongoDB notifications; motion “edges” are derived from merged sensor history (device + demo cohort). CSV cohort lines are synthetic diary samples aligned to the current week for charts, they are not new server writes. Use the checkboxes to choose entries, then remove them from this view only (hidden on this browser until you restore them).',
 };
 
 function normalizeDescription(description) {
@@ -96,7 +96,7 @@ export default function ActivityTimeline({ items, description }) {
             id: 'placeholder',
             title: 'Waiting for merged timeline',
             timeLabel: '',
-            detail: 'Connect the device or refresh — cohort CSV still backs the merged timeline.',
+            detail: 'Connect the device or refresh, cohort CSV still backs the merged timeline.',
             kind: 'rest',
           },
         ];

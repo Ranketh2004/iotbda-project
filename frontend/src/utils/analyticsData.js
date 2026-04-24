@@ -181,7 +181,7 @@ export function getCsvSensorHistory() {
 
 function cryMessageFromRow(row, idx, total) {
   const parts = [
-    `Cohort log ${row.baby_id || 'baby'} — cry ${idx + 1}/${total} on ${row.date || '?'}.`,
+    `Cohort log ${row.baby_id || 'baby'} - cry ${idx + 1}/${total} on ${row.date || '?'}.`,
     `Intensity ${row.cry_intensity_avg || 'n/a'}, feeding: ${row.feeding_type || 'n/a'} (${row.main_food_types || 'n/a'}).`,
     `Nutrition signal: ${row.estimated_nutrition_level || 'n/a'}; peak fuss: ${row.time_of_day_peak_cry || 'n/a'}.`,
   ];
@@ -300,7 +300,7 @@ export function mergeNotifications(mongoList, csvList) {
   for (const n of [...m, ...s]) {
     const ts = Number(n.timestamp);
     if (!Number.isFinite(ts)) continue;
-    // Mongo docs must dedupe by _id only — old key used ts.toFixed(0)+message and dropped distinct
+    // Mongo docs must dedupe by _id only; the old key used ts.toFixed(0)+message and dropped distinct
     // alerts in the same second with the same template (e.g. multiple cry_label values).
     const id = n._id != null && n._id !== '' ? String(n._id) : '';
     const key = id
@@ -479,9 +479,9 @@ export function enrichNotificationAsEvent(n, sensors) {
   const confidenceVariant =
     confidence >= 85 ? 'green' : confidence >= 75 ? 'yellow' : 'grey';
   const tempStr =
-    sn?.temperature != null ? `${Number(sn.temperature).toFixed(0)}°C` : '—';
-  const humStr = sn?.humidity != null ? `${Number(sn.humidity).toFixed(0)}%` : '—';
-  const lightLabel = sn ? (sn.light_dark ? 'Dark' : 'Bright') : '—';
+    sn?.temperature != null ? `${Number(sn.temperature).toFixed(0)}°C` : '-';
+  const humStr = sn?.humidity != null ? `${Number(sn.humidity).toFixed(0)}%` : '-';
+  const lightLabel = sn ? (sn.light_dark ? 'Dark' : 'Bright') : '-';
   const lightIcon = sn?.light_dark ? 'moon' : 'sun';
   return {
     id: `n-${ts}`,
@@ -522,8 +522,8 @@ export function mergeCryEvents(csvStructuredEvents, notifications, sensors) {
       timestamp: ts,
       icon: e.reason === 'tired' ? 'moon' : e.reason === 'discomfort' ? 'circle' : 'frown',
       iconTone,
-      temp: sn?.temperature != null ? `${Number(sn.temperature).toFixed(0)}°C` : '—',
-      humidity: sn?.humidity != null ? `${Number(sn.humidity).toFixed(0)}%` : '—',
+      temp: sn?.temperature != null ? `${Number(sn.temperature).toFixed(0)}°C` : '-',
+      humidity: sn?.humidity != null ? `${Number(sn.humidity).toFixed(0)}%` : '-',
       light: e.lightLabel ?? (sn?.light_dark ? 'Dark' : 'Bright'),
       lightIcon: e.lightIcon || (sn?.light_dark ? 'moon' : 'sun'),
       footerLeft: e.footerLeft,
@@ -812,7 +812,7 @@ export function buildStoryChapters({ sensors, events, liveTemp, liveHum, cryStat
       title: 'Environment beat',
       body: `Average humidity is around ${hum.toFixed(
         0,
-      )}% — on the high side for Colombo-area nurseries. Ventilation or a compact dehumidifier during sleep blocks often reduces false “discomfort” spikes.`,
+      )}%, on the high side for Colombo-area nurseries. Ventilation or a compact dehumidifier during sleep blocks often reduces false “discomfort” spikes.`,
     });
   } else if (hum != null) {
     chapters.push({
@@ -883,7 +883,7 @@ export function exploratoryAgentReply(question, ctx) {
   const q = String(question || '').trim().toLowerCase();
   const { events, sensors, topReason, alerts24, avgHum, avgTmp } = ctx;
   if (!q) {
-    return 'Ask about humidity, temperature, cry counts, top reasons, or what to do next — I use merged MongoDB readings plus the infant cry & nutrition CSV on this device.';
+    return 'Ask about humidity, temperature, cry counts, top reasons, or what to do next. I use merged MongoDB readings plus the infant cry & nutrition CSV on this device.';
   }
   if (/help|^what can|suggest|recommend|should i/.test(q)) {
     return buildDecisionSupport({ sensors, events })
@@ -893,7 +893,7 @@ export function exploratoryAgentReply(question, ctx) {
   if (/humid/.test(q)) {
     return avgHum != null
       ? `Blended average humidity is about ${avgHum.toFixed(1)}% across the visible series. ${
-          avgHum > 70 ? 'That is elevated — prioritize airflow in the sleep block.' : 'That sits in a typical comfort band.'
+          avgHum > 70 ? 'That is elevated; prioritize airflow in the sleep block.' : 'That sits in a typical comfort band.'
         }`
       : 'No humidity samples in the merged window yet.';
   }
@@ -916,9 +916,9 @@ export function exploratoryAgentReply(question, ctx) {
     return `Severity split in the merged window: ${c} critical, ${m} mild. Open Analytics filters to isolate each band.`;
   }
   if (/mongo|database|live|real|csv|cohort/.test(q)) {
-    return 'Live rows from your CryGuard API (MongoDB) are merged with infant_cry_nutrition_data.csv — daily cry counts and feeding fields are expanded into alerts and aligned to the current week for charting.';
+    return 'Live rows from your CryGuard API (MongoDB) are merged with infant_cry_nutrition_data.csv. Daily cry counts and feeding fields are expanded into alerts and aligned to the current week for charting.';
   }
-  return `Try: “What’s average humidity?”, “How many cries last 24h?”, or “What should I do?” — Top reason right now: ${topReason || 'unknown'}.`;
+  return `Try: “What’s average humidity?”, “How many cries last 24h?”, or “What should I do?”. Top reason right now: ${topReason || 'unknown'}.`;
 }
 
 export function buildAgentContext(mergedSensors, mergedEvents, mergedNotifications) {
@@ -940,7 +940,7 @@ export function formatCryTimelineDetail(message) {
   const raw = String(message || '').trim();
   if (!raw) return '';
 
-  const cohort = /^Cohort log\s+(\S+)\s*—\s*cry\s+(\d+)\/(\d+)\s+on\s+([\d?-]+)\.\s*/i.exec(raw);
+  const cohort = /^Cohort log\s+(\S+)\s*(?:-\s+|,\s*|\u2014\s*)cry\s+(\d+)\/(\d+)\s+on\s+([\d?-]+)\.\s*/i.exec(raw);
   if (cohort) {
     const babyId = cohort[1];
     const cryIdx = cohort[2];
@@ -981,7 +981,7 @@ export function buildActivityTimelineItems(sensors, notifications) {
     if (prevMotion !== s.motion) {
       items.push({
         id: `mot-${s.timestamp}`,
-        title: s.motion ? 'Motion picked up' : 'Settled — low motion',
+        title: s.motion ? 'Motion picked up' : 'Settled (low motion)',
         timeLabel: formatEventTime(s.timestamp),
         detail: '',
         kind: 'motion',
@@ -997,7 +997,7 @@ export function buildActivityTimelineItems(sensors, notifications) {
 export function computeAnalyticsSummary(events, sensors, notifications) {
   const hist =
     notifications != null ? reasonHistogramFromCryLabels(notifications) : reasonHistogram(events);
-  const top = hist[0]?.reason || '—';
+  const top = hist[0]?.reason || '-';
   const topCount = hist[0]?.count ?? 0;
   const totalLabeled = hist.reduce((s, h) => s + h.count, 0) || 1;
   const topShare = Math.round((topCount / totalLabeled) * 100);

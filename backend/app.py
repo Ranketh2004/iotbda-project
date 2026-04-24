@@ -75,7 +75,7 @@ if FRONTEND_DIST.is_dir() and (FRONTEND_DIST / "index.html").is_file():
     logger.info("Serving frontend from %s", FRONTEND_DIST)
 else:
     logger.info(
-        "Frontend dist not found at %s — build with: cd frontend && npm run build",
+        "Frontend dist not found at %s, build with: cd frontend && npm run build",
         FRONTEND_DIST,
     )
 

@@ -31,7 +31,7 @@ async def detect_cry_endpoint(request: Request):
         # 1. Preprocess (MFCC) + waveform RMS for silence gating
         features, audio_rms = preprocess_audio(audio_bytes)
 
-        # 2. Skip model on near-silence — normalized MFCC of noise looks like fake "structure"
+        # 2. Skip model on near-silence, normalized MFCC of noise looks like fake "structure"
         prediction_meta = {}
         if audio_rms < settings.MIN_AUDIO_RMS:
             logger.info(
@@ -59,7 +59,7 @@ async def detect_cry_endpoint(request: Request):
         if result.get("cry_detected"):
             logger.info("Cry alert: audio + PIR motion confirmed.")
         elif is_crying:
-            logger.info("Mic cry-like; PIR no motion — no combined alert.")
+            logger.info("Mic cry-like; PIR no motion, no combined alert.")
         else:
             logger.info("No cry detected.")
             

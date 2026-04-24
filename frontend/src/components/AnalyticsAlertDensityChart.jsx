@@ -15,7 +15,7 @@ export default function AnalyticsAlertDensityChart({ events, hours = 48 }) {
     <section className="analytics-viz-card" aria-label="When cry alerts happened by hour">
       <h2 className="analytics-viz-title">When alerts happened</h2>
       <p className="analytics-viz-sub">
-        Last {hours} hours, hour by hour—taller bars mean more alerts in that hour (your device time).
+        Last {hours} hours, hour by hour, taller bars mean more alerts in that hour (your device time).
       </p>
       <svg viewBox={`0 0 ${w} ${h}`} className="analytics-viz-svg" role="img">
         {bins.map((b, i) => {

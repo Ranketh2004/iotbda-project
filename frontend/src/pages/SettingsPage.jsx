@@ -512,7 +512,7 @@ export default function SettingsPage() {
                             </div>
                           ) : (
                             <>
-                              <p className="settings-guardian-name">{g.name || '—'}</p>
+                              <p className="settings-guardian-name">{g.name || '-'}</p>
                               <p className="settings-guardian-role">{g.role || 'Guardian'}</p>
                             </>
                           )}
@@ -545,7 +545,7 @@ export default function SettingsPage() {
                       {editingId !== g.id ? (
                         <p className="settings-guardian-phone">
                           <Phone size={14} strokeWidth={2} aria-hidden />
-                          {g.phone || '—'}
+                          {g.phone || '-'}
                         </p>
                       ) : null}
                     </div>

@@ -26,11 +26,7 @@ export default function AnalyticsSensorCorrelationPanel({ sensors }) {
         <h2 id="analytics-corr-title" className="analytics-corr-title">
           How temperature, humidity, and movement line up
         </h2>
-        <p className="analytics-corr-sub">
-          This looks at your recent room readings together—not to diagnose anything, but to spot patterns (for
-          example, whether the room feels damper when it is warmer or when the lights are low). Numbers are best
-          guesses from the sensor, not medical advice.
-        </p>
+        
       </div>
 
       {!analysis.ok && (
@@ -44,10 +40,7 @@ export default function AnalyticsSensorCorrelationPanel({ sensors }) {
 
       {analysis.ok && (
         <>
-          <p className="analytics-corr-meta">
-            Based on <span className="analytics-corr-n-strong">{analysis.n}</span> recent readings that had both
-            temperature and humidity.
-          </p>
+         
 
           <p className="analytics-corr-legend" role="note">
             In the grid below: numbers closer to <strong>1</strong> mean two things often rise or fall together;
@@ -80,7 +73,7 @@ export default function AnalyticsSensorCorrelationPanel({ sensors }) {
                             className="analytics-corr-td"
                             style={{ background: corrCellBg(cell) }}
                           >
-                            {cell == null ? '—' : cell}
+                            {cell == null ? '-' : cell}
                           </td>
                         ))}
                       </tr>
@@ -99,7 +92,7 @@ export default function AnalyticsSensorCorrelationPanel({ sensors }) {
                       {p.a} and {p.b}
                     </span>
                     <span className="analytics-corr-pair-r">
-                      {p.r == null ? '—' : `${p.r > 0 ? '+' : ''}${p.r}`}
+                      {p.r == null ? '-' : `${p.r > 0 ? '+' : ''}${p.r}`}
                       {p.r != null && (
                         <span className="analytics-corr-pair-note"> ({strengthWord(p.r)} link)</span>
                       )}
@@ -112,7 +105,7 @@ export default function AnalyticsSensorCorrelationPanel({ sensors }) {
                 What tends to move with humidity
               </h3>
               <p className="analytics-corr-block-lead">
-                Rough ranking from the same readings—useful for “what might we tweak in the room?”, not for
+                Rough ranking from the same readings, useful for “what might we tweak in the room?”, not for
                 medical decisions.
               </p>
               <ul className="analytics-corr-bars" aria-label="Factors that line up most with humidity">
@@ -145,7 +138,7 @@ export default function AnalyticsSensorCorrelationPanel({ sensors }) {
                 Cooler half of the room vs warmer half
               </h3>
               <p className="analytics-corr-strat">
-                We split readings around <strong>{analysis.stratified.threshold}°C</strong>—about half were cooler
+                We split readings around <strong>{analysis.stratified.threshold}°C</strong>. About half were cooler
                 ({analysis.stratified.nBelow} readings) and half were warmer ({analysis.stratified.nAbove}). Average
                 humidity was about <strong>{analysis.stratified.meanHumidityBelow}%</strong> on the cooler side and{' '}
                 <strong>{analysis.stratified.meanHumidityAbove}%</strong> on the warmer side (a gap of{' '}
@@ -156,7 +149,7 @@ export default function AnalyticsSensorCorrelationPanel({ sensors }) {
           </div>
 
           <p className="analytics-corr-foot">
-            If anything here worries you about your baby’s health, trust your pediatrician—not this screen.
+            If anything here worries you about your baby’s health, trust your pediatrician, not this screen.
           </p>
         </>
       )}

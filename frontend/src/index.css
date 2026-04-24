@@ -22,7 +22,7 @@
   --border:        #334155;
   --radius:        16px;
 
-  /* Baby Guard — soft nursery + playful “cute” tokens */
+  /* Baby Guard, soft nursery + playful “cute” tokens */
   --baby-bg-base: #eef4ff;
   --cute-pink: #f472b6;
   --cute-pink-soft: #fce7f3;
@@ -67,7 +67,7 @@ body {
   background-attachment: fixed;
 }
 
-/* ── Layout (legacy dashboard container — optional) ───────── */
+/* ── Layout (legacy dashboard container, optional) ───────── */
 .app {
   max-width: 1200px;
   margin: 0 auto;
@@ -1582,7 +1582,7 @@ body {
   background: transparent;
 }
 
-/* Full-width white bar (like landing header) — separated from page gradient */
+/* Full-width white bar (like landing header), separated from page gradient */
 .dash-header {
   width: 100vw;
   position: sticky;
@@ -4075,7 +4075,7 @@ a.dash-icon-btn {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Analytics — Cry History
+   Analytics, Cry History
    ═══════════════════════════════════════════════════════════ */
 .analytics-page.dash-page {
   background: transparent;
@@ -4325,110 +4325,7 @@ a.dash-icon-btn {
   box-shadow: none;
 }
 
-/* Analytics — Mongo sensor → daily care hints */
-.analytics-sensor-insights {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 20px 20px 16px;
-  margin-bottom: 24px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
-}
-
-.analytics-sensor-insights--error {
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-.analytics-sensor-insights-head {
-  margin-bottom: 14px;
-}
-
-.analytics-sensor-insights-title {
-  margin: 0 0 6px;
-  font-size: 16px;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.analytics-sensor-insights-sub {
-  margin: 0;
-  font-size: 13px;
-  color: #64748b;
-  line-height: 1.45;
-}
-
-.analytics-sensor-insights-muted,
-.analytics-sensor-insights-err {
-  margin: 0;
-  font-size: 13px;
-  color: #64748b;
-}
-
-.analytics-sensor-insights-err {
-  color: #b91c1c;
-}
-
-.analytics-sensor-insights-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-@media (max-width: 900px) {
-  .analytics-sensor-insights-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 520px) {
-  .analytics-sensor-insights-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.analytics-sensor-tile {
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 12px 12px 10px;
-  background: #fafafa;
-}
-
-.analytics-sensor-tile-ico {
-  color: #3b82f6;
-  margin-bottom: 6px;
-}
-
-.analytics-sensor-tile-label {
-  margin: 0 0 4px;
-  font-size: 11px;
-  font-weight: 700;
-  color: #64748b;
-  letter-spacing: 0.02em;
-}
-
-.analytics-sensor-tile-value {
-  margin: 0 0 4px;
-  font-size: 18px;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.analytics-sensor-tile-hint {
-  margin: 0;
-  font-size: 11px;
-  color: #94a3b8;
-  line-height: 1.35;
-}
-
-.analytics-sensor-insights-foot {
-  margin: 14px 0 0;
-  font-size: 11px;
-  color: #94a3b8;
-  line-height: 1.4;
-}
-
-/* Analytics — sensor correlation / ridge importance */
+/* Analytics, sensor correlation / ridge importance */
 .analytics-corr-card {
   background: #fff;
   border: 1px solid #e2e8f0;
@@ -4730,13 +4627,55 @@ a.dash-icon-btn {
   margin-bottom: 24px;
 }
 
+.analytics-recent--collapsed {
+  padding-bottom: 18px;
+}
+
+.analytics-recent--collapsed .analytics-recent-head {
+  margin-bottom: 0;
+}
+
 .analytics-recent-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 20px;
+}
+
+.analytics-recent-head-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.analytics-recent-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
+  color: #3b82f6;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.analytics-recent-toggle:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.analytics-recent-toggle-ico {
+  flex-shrink: 0;
 }
 
 .analytics-recent-title {
@@ -4744,6 +4683,12 @@ a.dash-icon-btn {
   font-weight: 700;
   color: #0f172a;
   margin: 0;
+}
+
+.analytics-recent-collapsed-hint {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
 }
 
 .analytics-recent-tools {
@@ -6343,7 +6288,6 @@ a.notif-gear-btn--link {
 .theme-dark .analytics-stat-card,
 .theme-dark .analytics-recent,
 .theme-dark .analytics-corr-card,
-.theme-dark .analytics-sensor-insights,
 .theme-dark .care-log-form,
 .theme-dark .notif-card,
 .theme-dark .notif-empty,
@@ -6447,7 +6391,6 @@ a.notif-gear-btn--link {
   color: #e2e8f0;
 }
 
-.theme-dark .analytics-sensor-insights-title,
 .theme-dark .analytics-corr-title {
   color: #f1f5f9;
 }
@@ -6508,30 +6451,6 @@ a.notif-gear-btn--link {
 
 .theme-dark .analytics-corr-bar-track {
   background: #334155;
-}
-
-.theme-dark .analytics-sensor-insights-sub,
-.theme-dark .analytics-sensor-insights-muted,
-.theme-dark .analytics-sensor-insights-foot,
-.theme-dark .analytics-sensor-tile-hint {
-  color: #94a3b8;
-}
-
-.theme-dark .analytics-sensor-insights-err {
-  color: #fecaca;
-}
-
-.theme-dark .analytics-sensor-tile {
-  background: #0f172a;
-  border-color: #334155;
-}
-
-.theme-dark .analytics-sensor-tile-value {
-  color: #e2e8f0;
-}
-
-.theme-dark .analytics-sensor-tile-label {
-  color: #94a3b8;
 }
 
 .theme-dark .care-log-insight-foot {
@@ -7203,6 +7122,21 @@ a.notif-gear-btn--link {
   color: #60a5fa;
 }
 
+.theme-dark .analytics-recent-toggle {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.18);
+  border-color: #334155;
+}
+
+.theme-dark .analytics-recent-toggle:hover {
+  background: rgba(59, 130, 246, 0.28);
+  color: #bfdbfe;
+}
+
+.theme-dark .analytics-recent-collapsed-hint {
+  color: #94a3b8;
+}
+
 .theme-dark .analytics-insight {
   background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
   border-color: #334155;
@@ -7301,7 +7235,7 @@ a.notif-gear-btn--link {
   color: #cbd5e1;
 }
 
-/* —— Landing (home) —— */
+/* -- Landing (home) -- */
 .theme-dark .landing {
   background: transparent;
   color: #e2e8f0;
@@ -7413,7 +7347,7 @@ a.notif-gear-btn--link {
   color: rgba(226, 232, 240, 0.9);
 }
 
-/* —— Login —— */
+/* -- Login -- */
 .theme-dark .login-left {
   background: #0f172a;
 }
@@ -7496,7 +7430,7 @@ a.notif-gear-btn--link {
   border-color: #475569;
 }
 
-/* —— Sign up —— */
+/* -- Sign up -- */
 .theme-dark .signup-page {
   background: transparent;
   color: #e2e8f0;
@@ -9180,7 +9114,7 @@ a.notif-gear-btn--link {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Nursery background — baby app icons + stars + pastel sparks
+   Nursery background, baby app icons + stars + pastel sparks
    ═══════════════════════════════════════════════════════════ */
 .cute-bg-decor {
   position: fixed;
@@ -9227,7 +9161,7 @@ a.notif-gear-btn--link {
   opacity: 0.2;
 }
 
-/* Tiny pastel dots — twinkle */
+/* Tiny pastel dots, twinkle */
 .nursery-spark {
   position: absolute;
   display: block;
@@ -9240,7 +9174,7 @@ a.notif-gear-btn--link {
   animation-delay: var(--spark-delay, 0s);
 }
 
-/* Baby-app icons (Lucide + custom bottle / pacifier) — edges only, soft float */
+/* Baby-app icons (Lucide + custom bottle / pacifier), edges only, soft float */
 .nursery-icon {
   position: absolute;
   display: flex;

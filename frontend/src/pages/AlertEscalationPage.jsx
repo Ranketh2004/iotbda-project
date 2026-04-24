@@ -26,7 +26,7 @@ function formatEscTimer(totalSecs) {
 }
 
 function formatTime(ts) {
-  if (ts == null) return '—';
+  if (ts == null) return '-';
   try {
     return new Date(ts * 1000).toLocaleTimeString([], {
       hour: 'numeric',
@@ -34,7 +34,7 @@ function formatTime(ts) {
       second: '2-digit',
     });
   } catch {
-    return '—';
+    return '-';
   }
 }
 
@@ -129,8 +129,8 @@ function buildLogRows(wave) {
       time: formatTime(ev.at),
       icon: err ? 'missed' : 'sms',
       title: err
-        ? `SMS failed — ${slot.replace('guardian', 'Guardian ').replace('parent', 'Parent ')}`
-        : `SMS queued — ${slot.replace('guardian', 'Guardian ').replace('parent', 'Parent ')} (${ev.label || 'contact'})`,
+        ? `SMS failed, ${slot.replace('guardian', 'Guardian ').replace('parent', 'Parent ')}`
+        : `SMS queued, ${slot.replace('guardian', 'Guardian ').replace('parent', 'Parent ')} (${ev.label || 'contact'})`,
       sub: err
         ? ev.detail || 'Gateway error'
         : ev.group_id
@@ -197,9 +197,9 @@ export default function AlertEscalationPage() {
   const reasonText =
     (wave?.cry_label && String(wave.cry_label).trim()) ||
     (cryStatus?.cry_label && String(cryStatus.cry_label).trim()) ||
-    '—';
+    '-';
 
-  const startedLabel = wave?.started_at ? formatTime(wave.started_at) : '—';
+  const startedLabel = wave?.started_at ? formatTime(wave.started_at) : '-';
 
   const nextSec = nextCountdownSec(esc?.next_auto_sec);
   const timerSecs = nextSec != null ? nextSec : 0;
@@ -293,7 +293,7 @@ export default function AlertEscalationPage() {
                 <div className="esc-escalation-timer-box">
                   <span className="esc-escalation-timer-label">Next auto SMS in</span>
                   <span className="esc-escalation-timer-val" aria-live="polite">
-                    {loading ? '—' : wave?.active && !wave?.acknowledged ? formatEscTimer(timerSecs) : '—'}
+                    {loading ? '-' : wave?.active && !wave?.acknowledged ? formatEscTimer(timerSecs) : '-'}
                   </span>
                 </div>
               </div>
@@ -343,12 +343,12 @@ export default function AlertEscalationPage() {
                 <div className="esc-flow-node">
                   <FlowIcon kind={c.icon} />
                   <p className="esc-flow-role">
-                    {c.label ? `${c.role} — ${c.label}` : c.role}
+                    {c.label ? `${c.role}, ${c.label}` : c.role}
                   </p>
                   <span className={`esc-flow-badge esc-flow-badge--${badgeClass(c.badge)}`}>
                     {badgeLabel(c.badge)}
                   </span>
-                  <p className="esc-flow-phone">{c.phone_display || '—'}</p>
+                  <p className="esc-flow-phone">{c.phone_display || '-'}</p>
                 </div>
                 {i < contacts.length - 1 && <span className="esc-flow-connector" aria-hidden />}
               </React.Fragment>

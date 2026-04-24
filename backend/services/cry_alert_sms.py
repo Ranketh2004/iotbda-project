@@ -90,7 +90,7 @@ async def _cancel_tasks(user_id: str) -> None:
 def _format_phone_display(digits: str) -> str:
     d = "".join(c for c in (digits or "") if c.isdigit())
     if not d:
-        return "—"
+        return "-"
     if len(d) <= 6:
         return f"+{d}"
     return f"+{d[:2]} … {d[-4:]}"
@@ -411,7 +411,7 @@ async def send_manual_cry_escalation_sms(
 
     baby = user.get("baby") or {}
     text = format_cry_alert_message(
-        alert_message or "Please check the nursery — cry alert.",
+        alert_message or "Please check the nursery, cry alert.",
         cry_label,
         baby.get("name"),
     )

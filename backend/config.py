@@ -49,7 +49,7 @@ class Settings:
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
     GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000")
 
-    # Keen Systems SMS (https://keensystems.com.lk/smsAPI) — cry alerts to parents / guardians
+    # Keen Systems SMS (https://keensystems.com.lk/smsAPI), cry alerts to parents / guardians
     KEEN_SMS_API_URL: str = os.getenv("KEEN_SMS_API_URL", "https://keensystems.com.lk/smsAPI").strip()
     KEEN_SMS_API_KEY: str = os.getenv("KEEN_SMS_API_KEY", "").strip()
     KEEN_SMS_API_TOKEN: str = os.getenv("KEEN_SMS_API_TOKEN", "").strip()

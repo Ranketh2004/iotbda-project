@@ -240,7 +240,7 @@ export default function EnvironmentTrends({ series, temperature, humidity }) {
             </linearGradient>
           </defs>
 
-          {/* Left axis — °C (temperature mode only) */}
+          {/* Left axis, °C (temperature mode only) */}
           {metric === 'temperature' &&
             chart.tempTicks.map((tv, i) => {
               const y = chart.yForTemp(tv);
@@ -262,7 +262,7 @@ export default function EnvironmentTrends({ series, temperature, humidity }) {
               );
             })}
 
-          {/* Right axis — % RH (humidity mode only) */}
+          {/* Right axis, % RH (humidity mode only) */}
           {metric === 'humidity' &&
             chart.humTicks.map((hv, i) => {
               const y = chart.yForHum(hv);

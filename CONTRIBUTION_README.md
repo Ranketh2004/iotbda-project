@@ -1,4 +1,4 @@
-# CryGuard — Team Contribution Breakdown
+# CryGuard, Team Contribution Breakdown
 
 This document details the division of work among the four team members for the CryGuard project. Each member is responsible for a major subsystem, with tasks distributed for balanced contribution and clear ownership.
 

@@ -14,13 +14,14 @@ import {
   AlertTriangle,
   Lightbulb,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import DashboardHeader from '../components/DashboardHeader';
 import DashboardFooter from '../components/DashboardFooter';
 import CryAlertDetailModal from '../components/CryAlertDetailModal';
 import AnalyticsCryReasonChart from '../components/AnalyticsCryReasonChart';
 import AnalyticsAlertDensityChart from '../components/AnalyticsAlertDensityChart';
-import AnalyticsSensorCareInsights from '../components/AnalyticsSensorCareInsights';
 import AnalyticsSensorCorrelationPanel from '../components/AnalyticsSensorCorrelationPanel';
 import { fetchSensorHistory, fetchNotifications } from '../services/api';
 import {
@@ -74,6 +75,7 @@ export default function AnalyticsPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState('all');
   const [detailEvent, setDetailEvent] = useState(null);
+  const [recentAlertsOpen, setRecentAlertsOpen] = useState(true);
   const [mergedSensors, setMergedSensors] = useState([]);
   const [mergedEvents, setMergedEvents] = useState([]);
   const [mergedNotifs, setMergedNotifs] = useState([]);
@@ -134,7 +136,7 @@ export default function AnalyticsPage() {
     if (humAvg != null && humAvg > 71) {
       return `Humidity has been around ${humAvg.toFixed(
         0,
-      )}% lately—on the high side for many nurseries. A little airflow, a dehumidifier, or running AC on dry mode before sleep can help the room feel less “sticky” and may reduce fussy spells tied to feeling too damp.`;
+      )}% lately, on the high side for many nurseries. A little airflow, a dehumidifier, or running AC on dry mode before sleep can help the room feel less “sticky” and may reduce fussy spells tied to feeling too damp.`;
     }
     if (humAvg != null) {
       return `Humidity near ${humAvg.toFixed(
@@ -163,12 +165,7 @@ export default function AnalyticsPage() {
       <div className="analytics-shell">
         <header className="analytics-page-head">
           <h1 className="analytics-title">How things have been going</h1>
-          <p className="analytics-subtitle">
-            A simple picture of recent cries, room comfort, and what the app noticed—no spreadsheet skills required.
-            When your sensor and alerts are connected, these numbers reflect your nursery; otherwise you may see
-            demo-style patterns for comparison. On the main dashboard, the nursery coach can walk through any of
-            this in plain language.
-          </p>
+         
         </header>
 
         <div className="analytics-stats">
@@ -207,8 +204,6 @@ export default function AnalyticsPage() {
           </article>
         </div>
 
-        <AnalyticsSensorCareInsights />
-
         <AnalyticsSensorCorrelationPanel sensors={mergedSensors} />
 
         <div className="analytics-viz-grid">
@@ -220,90 +215,122 @@ export default function AnalyticsPage() {
           <AnalyticsAlertDensityChart events={mergedEvents} hours={48} />
         </div>
 
-        <section className="analytics-recent">
+        <section className={`analytics-recent${recentAlertsOpen ? '' : ' analytics-recent--collapsed'}`}>
           <div className="analytics-recent-head">
-            <h2 className="analytics-recent-title">Recent alerts</h2>
-            <div className="analytics-recent-tools">
-              <button type="button" className="analytics-date-btn">
-                {todayLabel}
+            <div className="analytics-recent-head-left">
+              <button
+                type="button"
+                id="analytics-recent-toggle"
+                className="analytics-recent-toggle"
+                aria-expanded={recentAlertsOpen}
+                aria-controls="analytics-recent-panel"
+                onClick={() => setRecentAlertsOpen((v) => !v)}
+              >
+                {recentAlertsOpen ? (
+                  <ChevronUp size={20} className="analytics-recent-toggle-ico" aria-hidden />
+                ) : (
+                  <ChevronDown size={20} className="analytics-recent-toggle-ico" aria-hidden />
+                )}
+                <span className="visually-hidden">
+                  {recentAlertsOpen ? 'Collapse recent alerts' : 'Expand recent alerts'}
+                </span>
               </button>
-              <div className="analytics-filter" role="group" aria-label="Filter alerts by urgency">
-                {FILTERS.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    className={`analytics-filter-btn ${filter === f.id ? 'active' : ''}`}
-                    onClick={() => setFilter(f.id)}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+              <h2 className="analytics-recent-title" id="analytics-recent-heading">
+                Recent alerts
+              </h2>
+              {!recentAlertsOpen && (
+                <span className="analytics-recent-collapsed-hint" aria-live="polite">
+                  {visibleEvents.length} {visibleEvents.length === 1 ? 'alert' : 'alerts'}
+                </span>
+              )}
             </div>
+            {recentAlertsOpen && (
+              <div className="analytics-recent-tools">
+                <button type="button" className="analytics-date-btn">
+                  {todayLabel}
+                </button>
+                <div className="analytics-filter" role="group" aria-label="Filter alerts by urgency">
+                  {FILTERS.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      className={`analytics-filter-btn ${filter === f.id ? 'active' : ''}`}
+                      onClick={() => setFilter(f.id)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          <ul className="analytics-event-list">
-            {visibleEvents.map((ev) => (
-              <li key={ev.id} className="analytics-event-card">
-                <div className="analytics-event-top">
-                  <EventIcon type={ev.icon} tone={ev.iconTone} />
-                  <div className="analytics-event-main">
-                    <div className="analytics-event-title-row">
-                      <span className="analytics-event-reason">{ev.reason}</span>
-                      <span className={`analytics-badge analytics-badge--${ev.confidenceVariant}`}>
-                        {ev.confidence}% sure
-                      </span>
-                    </div>
-                    <p className="analytics-event-time">{ev.time}</p>
-                  </div>
-                  <div className="analytics-event-metrics">
-                    <div className="analytics-metric">
-                      <Thermometer size={14} className="analytics-metric-ico" />
-                      <span className="analytics-metric-label">Temp</span>
-                      <span className="analytics-metric-val">{ev.temp}</span>
-                    </div>
-                    <div className="analytics-metric">
-                      <Droplets size={14} className="analytics-metric-ico" />
-                      <span className="analytics-metric-label">Humidity</span>
-                      <span className="analytics-metric-val">{ev.humidity}</span>
-                    </div>
-                    {ev.light != null && (
-                      <div className="analytics-metric">
-                        <span className="analytics-metric-ico-wrap">
-                          <LightIcon kind={ev.lightIcon} />
-                        </span>
-                        <span className="analytics-metric-label">Light</span>
-                        <span className="analytics-metric-val">{ev.light}</span>
+          {recentAlertsOpen && (
+            <div id="analytics-recent-panel" role="region" aria-labelledby="analytics-recent-heading">
+              <ul className="analytics-event-list">
+                {visibleEvents.map((ev) => (
+                  <li key={ev.id} className="analytics-event-card">
+                    <div className="analytics-event-top">
+                      <EventIcon type={ev.icon} tone={ev.iconTone} />
+                      <div className="analytics-event-main">
+                        <div className="analytics-event-title-row">
+                          <span className="analytics-event-reason">{ev.reason}</span>
+                          <span className={`analytics-badge analytics-badge--${ev.confidenceVariant}`}>
+                            {ev.confidence}% sure
+                          </span>
+                        </div>
+                        <p className="analytics-event-time">{ev.time}</p>
                       </div>
-                    )}
-                  </div>
-                </div>
-                <div className="analytics-event-foot">
-                  <div className="analytics-event-foot-left">
-                    {ev.footerLeft && (
-                      <span className="analytics-foot-text">
-                        {ev.escalation === 'triggered' && (
-                          <AlertTriangle size={14} className="analytics-foot-warn" />
+                      <div className="analytics-event-metrics">
+                        <div className="analytics-metric">
+                          <Thermometer size={14} className="analytics-metric-ico" />
+                          <span className="analytics-metric-label">Temp</span>
+                          <span className="analytics-metric-val">{ev.temp}</span>
+                        </div>
+                        <div className="analytics-metric">
+                          <Droplets size={14} className="analytics-metric-ico" />
+                          <span className="analytics-metric-label">Humidity</span>
+                          <span className="analytics-metric-val">{ev.humidity}</span>
+                        </div>
+                        {ev.light != null && (
+                          <div className="analytics-metric">
+                            <span className="analytics-metric-ico-wrap">
+                              <LightIcon kind={ev.lightIcon} />
+                            </span>
+                            <span className="analytics-metric-label">Light</span>
+                            <span className="analytics-metric-val">{ev.light}</span>
+                          </div>
                         )}
-                        {ev.footerLeft}
-                      </span>
-                    )}
-                    {ev.footerMid && <span className="analytics-foot-mid">{ev.footerMid}</span>}
-                    {ev.escalation === 'triggered' && (
-                      <span className="analytics-esc-badge">Escalation started</span>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="analytics-details-link"
-                    onClick={() => setDetailEvent(ev)}
-                  >
-                    Details &gt;
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                      </div>
+                    </div>
+                    <div className="analytics-event-foot">
+                      <div className="analytics-event-foot-left">
+                        {ev.footerLeft && (
+                          <span className="analytics-foot-text">
+                            {ev.escalation === 'triggered' && (
+                              <AlertTriangle size={14} className="analytics-foot-warn" />
+                            )}
+                            {ev.footerLeft}
+                          </span>
+                        )}
+                        {ev.footerMid && <span className="analytics-foot-mid">{ev.footerMid}</span>}
+                        {ev.escalation === 'triggered' && (
+                          <span className="analytics-esc-badge">Escalation started</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="analytics-details-link"
+                        onClick={() => setDetailEvent(ev)}
+                      >
+                        Details
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
 
         <div className="analytics-insight">
@@ -326,7 +353,7 @@ export default function AnalyticsPage() {
         confidence={detailEvent?.confidence}
         temperature={detailEvent?.temp}
         humidity={detailEvent?.humidity}
-        light={detailEvent?.light ?? '—'}
+        light={detailEvent?.light ?? '-'}
         motion={detailEvent?.motion}
       />
     </div>
