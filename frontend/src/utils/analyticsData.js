@@ -1042,3 +1042,96 @@ export function hourlyCryBuckets(events, hours = 48) {
   }
   return bins;
 }
+
+/** Cohort nutrition CSV rows in the same window used for merged charts. */
+export function getCohortNutritionRowsForDashboard() {
+  return cohortRowsForAnalytics();
+}
+
+function nutritionWaterBucket(w) {
+  const s = String(w || '').toLowerCase();
+  if (s.includes('low')) return 'low';
+  if (s.includes('high')) return 'high';
+  if (s.includes('adequate')) return 'adequate';
+  return 'unknown';
+}
+
+function formatShortIsoDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '').trim());
+  if (!m) return String(iso || '');
+  try {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function dominantWaterKey(counts) {
+  const ranked = ['low', 'adequate', 'high', 'unknown'].map((k) => [k, counts[k] || 0]);
+  ranked.sort((a, b) => b[1] - a[1]);
+  return ranked[0][1] > 0 ? ranked[0][0] : 'unknown';
+}
+
+/**
+ * Aggregates infant_cry_nutrition_data.csv cohort rows for dashboard nutrition tiles
+ * (water intake by day, cry frequency trend, nutrition mix).
+ */
+export function buildNutritionDashboardSummaries() {
+  const rows = cohortRowsForAnalytics();
+  if (!rows.length) {
+    return {
+      ok: false,
+      message: 'No nutrition cohort rows in the current date window.',
+    };
+  }
+  const dates = [...new Set(rows.map((r) => r.date).filter(Boolean))].sort();
+  const latest = dates[dates.length - 1];
+  const rowsLatest = rows.filter((r) => r.date === latest);
+  const waterOnLatestDay = { low: 0, adequate: 0, high: 0, unknown: 0 };
+  for (const r of rowsLatest) {
+    const b = nutritionWaterBucket(r.water_intake);
+    waterOnLatestDay[b]++;
+  }
+  const last7 = dates.slice(-7);
+  const waterByDay = last7.map((d) => {
+    const dayRows = rows.filter((r) => r.date === d);
+    const o = { date: d, label: formatShortIsoDate(d), low: 0, adequate: 0, high: 0, unknown: 0 };
+    for (const r of dayRows) {
+      o[nutritionWaterBucket(r.water_intake)]++;
+    }
+    return o;
+  });
+  const last14 = dates.slice(-14);
+  const cryByDay = last14.map((d) => {
+    const dayRows = rows.filter((r) => r.date === d);
+    const sum = dayRows.reduce((a, r) => a + (parseInt(r.cry_frequency, 10) || 0), 0);
+    const avg = dayRows.length ? sum / dayRows.length : 0;
+    return { date: d, label: formatShortIsoDate(d), avgCry: Math.round(avg * 10) / 10, n: dayRows.length };
+  });
+  const nutritionMix = {};
+  for (const r of rows) {
+    const n = String(r.estimated_nutrition_level || 'unknown').trim().toLowerCase() || 'unknown';
+    nutritionMix[n] = (nutritionMix[n] || 0) + 1;
+  }
+  const uniqueBabies = new Set(rows.map((r) => r.baby_id).filter(Boolean)).size;
+  const dominantLatest = dominantWaterKey(waterOnLatestDay);
+  const maxCry = Math.max(...cryByDay.map((c) => c.avgCry), 1);
+  const maxWaterStack = Math.max(...waterByDay.map((d) => d.low + d.adequate + d.high + d.unknown), 1);
+  return {
+    ok: true,
+    rowCount: rows.length,
+    uniqueBabies,
+    latestDate: latest,
+    latestDateLabel: formatShortIsoDate(latest),
+    waterOnLatestDay,
+    dominantWaterLatest: dominantLatest,
+    waterByDay,
+    cryByDay,
+    maxCry,
+    maxWaterStack,
+    nutritionMix,
+  };
+}

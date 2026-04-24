@@ -14,11 +14,17 @@ export default function DashboardFooter() {
             © {new Date().getFullYear()} {BRAND}. All rights reserved.
           </span>
         </div>
-        <nav className="dash-footer-links" aria-label="Footer">
-          <a href="#privacy">Privacy Policy</a>
-          <a href="#support">Support</a>
-          <a href="#contact">Contact</a>
-        </nav>
+        <div className="dash-footer-links">
+          <span className="dash-footer-muted">Privacy</span>
+          <span className="dash-footer-sep" aria-hidden>
+            ·
+          </span>
+          <span className="dash-footer-muted">Support</span>
+          <span className="dash-footer-sep" aria-hidden>
+            ·
+          </span>
+          <span className="dash-footer-muted">Contact</span>
+        </div>
       </div>
     </footer>
   );

@@ -17,8 +17,6 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import DashboardHeader from '../components/DashboardHeader';
-import DashboardFooter from '../components/DashboardFooter';
 import CryAlertDetailModal from '../components/CryAlertDetailModal';
 import AnalyticsCryReasonChart from '../components/AnalyticsCryReasonChart';
 import AnalyticsAlertDensityChart from '../components/AnalyticsAlertDensityChart';
@@ -159,10 +157,9 @@ export default function AnalyticsPage() {
   }, []);
 
   return (
-    <div className="dash-page analytics-page">
-      <DashboardHeader />
-
-      <div className="analytics-shell">
+    <>
+      <div className="analytics-page">
+        <div className="analytics-shell">
         <header className="analytics-page-head">
           <h1 className="analytics-title">How things have been going</h1>
          
@@ -339,9 +336,8 @@ export default function AnalyticsPage() {
             <strong>One takeaway:</strong> {insightText}
           </p>
         </div>
+        </div>
       </div>
-
-      <DashboardFooter />
 
       <CryAlertDetailModal
         open={detailEvent != null}
@@ -356,6 +352,6 @@ export default function AnalyticsPage() {
         light={detailEvent?.light ?? '-'}
         motion={detailEvent?.motion}
       />
-    </div>
+    </>
   );
 }

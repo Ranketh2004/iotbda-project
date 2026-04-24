@@ -1,7 +1,16 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Bell, LogOut, User } from 'lucide-react';
 import BrandLogoMark from './BrandLogoMark';
+import { useDashboardSession } from '../context/DashboardSessionContext';
+
+function readStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem('cryguard_user') || 'null');
+  } catch {
+    return null;
+  }
+}
 
 const BRAND = 'Infant Cry Guard';
 
@@ -23,6 +32,7 @@ export default function DashboardHeader() {
   const location = useLocation();
   const navigate = useNavigate();
   const path = location.pathname;
+  const { sessionNonce } = useDashboardSession();
 
   const handleLogout = () => {
     localStorage.removeItem('cryguard_token');
@@ -30,15 +40,9 @@ export default function DashboardHeader() {
     navigate('/login', { replace: true });
   };
 
-  const storedUser = React.useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem('cryguard_user') || 'null');
-    } catch {
-      return null;
-    }
-  }, []);
+  const storedUser = useMemo(() => readStoredUser(), [sessionNonce]);
 
-  const displayName = React.useMemo(() => {
+  const displayName = useMemo(() => {
     if (!storedUser) return '';
     if (storedUser.fullName) return storedUser.fullName;
     const email = storedUser.email || '';

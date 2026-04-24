@@ -2,16 +2,15 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { fetchStatus, fetchSensorHistory, fetchNotifications } from '../services/api';
-import DashboardHeader from '../components/DashboardHeader';
 import DeviceHeroCard from '../components/DeviceHeroCard';
 import SensorGrid from '../components/SensorGrid';
 import EnvironmentTrends from '../components/EnvironmentTrends';
 import CryPredictionPanel from '../components/CryPredictionPanel';
 import ListenButton from '../components/ListenButton';
-import ActivityTimeline from '../components/ActivityTimeline';
+import DashboardNutritionInsights from '../components/DashboardNutritionInsights';
 import CriticalAlerts from '../components/CriticalAlerts';
-import DashboardFooter from '../components/DashboardFooter';
 import CryAlertDetailModal from '../components/CryAlertDetailModal';
+import { useDashboardSession } from '../context/DashboardSessionContext';
 import NurseryCoachFab from '../components/NurseryCoachFab';
 import { BABY_AGE_LABELS } from '../constants/userProfile';
 import {
@@ -22,12 +21,12 @@ import {
   getCsvNotifications,
   getCsvCryEvents,
   buildAgentContext,
-  buildActivityTimelineItems,
 } from '../utils/analyticsData';
 
 const POLL_INTERVAL = 5000;
 
 export default function DashboardHome() {
+  const { bumpSession } = useDashboardSession();
   const navigate = useNavigate();
   const [sessionUser, setSessionUser] = useState(null);
   const [espConnected, setEspConnected] = useState(false);
@@ -88,6 +87,7 @@ export default function DashboardHome() {
         if (raw) {
           try {
             setSessionUser(JSON.parse(raw));
+            bumpSession();
           } catch {
             /* ignore */
           }
@@ -102,6 +102,7 @@ export default function DashboardHome() {
         if (cancelled) return;
         localStorage.setItem('cryguard_user', JSON.stringify(u));
         setSessionUser(u);
+        bumpSession();
       } catch {
         /* ignore */
       }
@@ -110,7 +111,7 @@ export default function DashboardHome() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [bumpSession]);
 
   useEffect(() => {
     loadAnalyticsMerge();
@@ -151,11 +152,6 @@ export default function DashboardHome() {
     () => buildAgentContext(mergedSensors, mergedEvents, mergedNotifs),
     [mergedSensors, mergedEvents, mergedNotifs],
   );
-  const timelineItems = useMemo(
-    () => buildActivityTimelineItems(mergedSensors, mergedNotifs),
-    [mergedSensors, mergedNotifs],
-  );
-
   const handleCryAlert = useCallback((data, notification) => {
     setCryStatus(data);
 
@@ -219,13 +215,10 @@ export default function DashboardHome() {
   }, []);
 
   return (
-    <div className="dash-page">
-      <DashboardHeader />
+    <>
       <DeviceHeroCard
         espConnected={espConnected}
-        sensorData={sensorData}
         cryStatus={cryStatus}
-        onDetailsClick={() => setDetailModalOpen(true)}
         babyName={sessionUser?.babyName}
         babyAgeLabel={sessionUser?.babyAge ? BABY_AGE_LABELS[sessionUser.babyAge] || sessionUser.babyAge : ''}
         babyPhotoUrl={sessionUser?.babyPhotoUrl}
@@ -246,14 +239,12 @@ export default function DashboardHome() {
       <ListenButton onCryAlert={handleCryAlert} />
 
       <div className="dash-coach-grid">
-        <ActivityTimeline items={timelineItems} />
+        <DashboardNutritionInsights />
       </div>
 
       <div className="dash-post-coach">
         <CriticalAlerts />
       </div>
-
-      <DashboardFooter />
 
       <NurseryCoachFab agentContext={agentContext} title="Cry Guard Assistant" />
 
@@ -288,6 +279,6 @@ export default function DashboardHome() {
         light={sensorData?.light_dark ? 'Dark' : 'Bright'}
         motion={sensorData?.motion ? 'Detected' : 'None'}
       />
-    </div>
+    </>
   );
 }

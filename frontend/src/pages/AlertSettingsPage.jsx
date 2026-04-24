@@ -10,8 +10,6 @@ import {
   MoreVertical,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import DashboardHeader from '../components/DashboardHeader';
-import DashboardFooter from '../components/DashboardFooter';
 
 const LEVELS = ['Low', 'Medium', 'High'];
 
@@ -103,8 +101,7 @@ export default function AlertSettingsPage() {
   const humPct = (h) => ((h - 20) / (80 - 20)) * 100;
 
   return (
-    <div className="dash-page settings-page">
-      <DashboardHeader />
+    <div className="settings-page">
       <div className="analytics-shell alert-set-shell">
         <header className="analytics-page-head">
           <h1 className="analytics-title">Alert Settings</h1>
@@ -357,7 +354,6 @@ export default function AlertSettingsPage() {
           </button>
         </footer>
       </div>
-      <DashboardFooter />
     </div>
   );
 }

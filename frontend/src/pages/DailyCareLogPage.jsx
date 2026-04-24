@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardList, Clock, RefreshCw, Save } from 'lucide-react';
-import DashboardHeader from '../components/DashboardHeader';
-import DashboardFooter from '../components/DashboardFooter';
 import {
   CRY_INTENSITY,
   MOTION_LEVEL,
@@ -309,9 +307,7 @@ export default function DailyCareLogPage() {
   );
 
   return (
-    <div className="dash-page care-log-page">
-      <DashboardHeader />
-
+    <div className="care-log-page">
       <div className="analytics-shell care-log-shell">
         <header className="analytics-page-head care-log-head">
           <div className="care-log-head-icon" aria-hidden>
@@ -580,8 +576,6 @@ export default function DailyCareLogPage() {
           </form>
         )}
       </div>
-
-      <DashboardFooter />
     </div>
   );
 }

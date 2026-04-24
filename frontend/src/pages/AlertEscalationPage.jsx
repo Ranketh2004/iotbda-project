@@ -14,8 +14,6 @@ import {
   Loader2,
   AlertCircle,
 } from 'lucide-react';
-import DashboardHeader from '../components/DashboardHeader';
-import DashboardFooter from '../components/DashboardFooter';
 import { acknowledgeCryAlert, fetchEscalationStatus, fetchStatus } from '../services/api';
 
 function formatEscTimer(totalSecs) {
@@ -218,9 +216,7 @@ export default function AlertEscalationPage() {
   };
 
   return (
-    <div className="dash-page settings-page esc-page">
-      <DashboardHeader />
-
+    <div className="settings-page esc-page">
       <div className="analytics-shell esc-shell">
         <nav className="esc-breadcrumb" aria-label="Breadcrumb">
           <Link to="/dashboard">Dashboard</Link>
@@ -403,8 +399,6 @@ export default function AlertEscalationPage() {
           API submissions, not carrier delivery receipts.
         </p>
       </div>
-
-      <DashboardFooter />
     </div>
   );
 }

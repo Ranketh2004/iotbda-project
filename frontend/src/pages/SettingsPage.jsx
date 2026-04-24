@@ -13,8 +13,7 @@ import {
   Moon,
   ChevronDown,
 } from 'lucide-react';
-import DashboardHeader from '../components/DashboardHeader';
-import DashboardFooter from '../components/DashboardFooter';
+import { useDashboardSession } from '../context/DashboardSessionContext';
 import {
   applyThemeToDocument,
   readDarkModeFromStorage,
@@ -130,6 +129,7 @@ function SectionTitle({ icon: Icon, children, id }) {
 }
 
 export default function SettingsPage() {
+  const { bumpSession } = useDashboardSession();
   const [form, setForm] = useState(() => getInitialSettingsForm());
   const [saved, setSaved] = useState(() => cloneDeep(getInitialSettingsForm()));
   const [editingId, setEditingId] = useState(null);
@@ -153,6 +153,7 @@ export default function SettingsPage() {
         if (cancelled) return;
         setForm((prev) => applyAccountUserToForm(prev, u));
         setSaved((prev) => applyAccountUserToForm(prev, u));
+        bumpSession();
       } catch {
         /* ignore */
       }
@@ -160,7 +161,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [bumpSession]);
 
   useEffect(() => {
     applyThemeToDocument(form.darkMode);
@@ -206,6 +207,7 @@ export default function SettingsPage() {
       }
       const user = await res.json();
       localStorage.setItem('cryguard_user', JSON.stringify(user));
+      bumpSession();
       const nextGuardians = mapApiGuardiansToSettingsForm(user.guardians);
       setForm((f) => ({ ...f, guardians: nextGuardians }));
       setSaved((f) => ({ ...f, guardians: cloneDeep(nextGuardians) }));
@@ -216,7 +218,7 @@ export default function SettingsPage() {
     } finally {
       setGuardianBusy(false);
     }
-  }, []);
+  }, [bumpSession]);
 
   const addGuardian = () => {
     const newbie = {
@@ -277,8 +279,7 @@ export default function SettingsPage() {
   }, [saved]);
 
   return (
-    <div className="dash-page settings-page">
-      <DashboardHeader />
+    <div className="settings-page">
       <div className="analytics-shell settings-shell">
         <header className="analytics-page-head settings-page-head">
           <h1 className="analytics-title">Settings</h1>
@@ -663,7 +664,6 @@ export default function SettingsPage() {
           </div>
         </section>
       </div>
-      <DashboardFooter />
     </div>
   );
 }

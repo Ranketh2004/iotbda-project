@@ -10,9 +10,8 @@ import {
   Smartphone,
   ChevronDown,
 } from 'lucide-react';
-import DashboardHeader from '../components/DashboardHeader';
-import DashboardFooter from '../components/DashboardFooter';
 import { DEFAULT_BABY_PLACEHOLDER_SRC } from '../constants/assets';
+import { useDashboardSession } from '../context/DashboardSessionContext';
 import { BABY_AGE_OPTIONS, mapApiUserToProfileForm } from '../constants/userProfile';
 
 function cloneDeep(obj) {
@@ -42,6 +41,7 @@ function SectionTitle({ icon: Icon, children, id }) {
 }
 
 export default function ProfilePage() {
+  const { bumpSession } = useDashboardSession();
   const navigate = useNavigate();
   const [form, setForm] = useState(() => mapApiUserToProfileForm(null));
   const [saved, setSaved] = useState(() => mapApiUserToProfileForm(null));
@@ -70,6 +70,7 @@ export default function ProfilePage() {
           if (res.ok) {
             const u = await res.json();
             localStorage.setItem('cryguard_user', JSON.stringify(u));
+            bumpSession();
             const next = mapApiUserToProfileForm(u);
             setForm(next);
             setSaved(cloneDeep(next));
@@ -94,7 +95,7 @@ export default function ProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [bumpSession]);
 
   useEffect(() => {
     return () => {
@@ -149,6 +150,7 @@ export default function ProfilePage() {
         return;
       }
       localStorage.setItem('cryguard_user', JSON.stringify(data));
+      bumpSession();
       const next = mapApiUserToProfileForm(data);
       revokePreviews();
       pendingParentFile.current = null;
@@ -162,7 +164,7 @@ export default function ProfilePage() {
     } finally {
       setSaving(false);
     }
-  }, [form, revokePreviews]);
+  }, [form, revokePreviews, bumpSession]);
 
   const handleCancel = useCallback(() => {
     setForm(cloneDeep(saved));
@@ -183,8 +185,7 @@ export default function ProfilePage() {
   const babyAvatarSrc = babyPreview || form.babyPhotoUrl || null;
 
   return (
-    <div className="dash-page settings-page">
-      <DashboardHeader />
+    <div className="settings-page">
       <div className="analytics-shell profile-shell">
         <header className="analytics-page-head settings-page-head">
           <h1 className="analytics-title">Profile Settings</h1>
@@ -488,7 +489,6 @@ export default function ProfilePage() {
           </button>
         </div>
       </div>
-      <DashboardFooter />
     </div>
   );
 }

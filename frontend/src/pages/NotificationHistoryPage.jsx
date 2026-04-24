@@ -8,8 +8,6 @@ import {
   Trash2,
   Settings,
 } from 'lucide-react';
-import DashboardHeader from '../components/DashboardHeader';
-import DashboardFooter from '../components/DashboardFooter';
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -110,8 +108,7 @@ export default function NotificationHistoryPage() {
   const clearAll = () => setItems([]);
 
   return (
-    <div className="dash-page settings-page">
-      <DashboardHeader />
+    <div className="settings-page">
       <div className="analytics-shell notif-shell">
         <div className="notif-page-head">
           <div className="notif-page-head-text">
@@ -195,7 +192,6 @@ export default function NotificationHistoryPage() {
           </div>
         )}
       </div>
-      <DashboardFooter />
     </div>
   );
 }
