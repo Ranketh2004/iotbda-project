@@ -29,10 +29,10 @@ import {
   getCsvSensorHistory,
   getCsvNotifications,
   getCsvCryEvents,
-  reasonHistogram,
   formatEventTime,
   avgHumidity,
   computeAnalyticsSummary,
+  reasonHistogramFromCryLabels,
 } from '../utils/analyticsData';
 
 const FILTERS = [
@@ -75,6 +75,7 @@ export default function AnalyticsPage() {
   const [detailEvent, setDetailEvent] = useState(null);
   const [mergedSensors, setMergedSensors] = useState([]);
   const [mergedEvents, setMergedEvents] = useState([]);
+  const [mergedNotifs, setMergedNotifs] = useState([]);
 
   const loadMerge = useCallback(async () => {
     try {
@@ -91,6 +92,7 @@ export default function AnalyticsPage() {
       const mn = mergeNotifications(mongoN, csvN);
       const ev = mergeCryEvents(csvCry, mn, ms);
       setMergedSensors(ms);
+      setMergedNotifs(mn);
       setMergedEvents(ev);
     } catch (e) {
       console.error('[analytics]', e);
@@ -100,6 +102,7 @@ export default function AnalyticsPage() {
       const ms = mergeSensorHistory([], csvS);
       const mn = mergeNotifications([], csvN);
       setMergedSensors(ms);
+      setMergedNotifs(mn);
       setMergedEvents(mergeCryEvents(csvCry, mn, ms));
     }
   }, []);
@@ -111,10 +114,10 @@ export default function AnalyticsPage() {
   }, [loadMerge]);
 
   const summary = useMemo(
-    () => computeAnalyticsSummary(mergedEvents, mergedSensors),
-    [mergedEvents, mergedSensors],
+    () => computeAnalyticsSummary(mergedEvents, mergedSensors, mergedNotifs),
+    [mergedEvents, mergedSensors, mergedNotifs],
   );
-  const histogram = useMemo(() => reasonHistogram(mergedEvents), [mergedEvents]);
+  const histogram = useMemo(() => reasonHistogramFromCryLabels(mergedNotifs), [mergedNotifs]);
   const visibleEvents = useMemo(() => {
     const list = mergedEvents.map((e) => ({
       ...e,

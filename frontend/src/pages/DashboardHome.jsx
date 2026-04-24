@@ -55,7 +55,7 @@ export default function DashboardHome() {
     try {
       const [histRes, notifRes] = await Promise.all([
         fetchSensorHistory(160).catch(() => ({ data: [] })),
-        fetchNotifications(100).catch(() => ({ notifications: [] })),
+        fetchNotifications(200).catch(() => ({ notifications: [] })),
       ]);
       const mongoS = histRes?.data || [];
       const mongoN = notifRes?.notifications || [];
@@ -149,8 +149,8 @@ export default function DashboardHome() {
   }, []);
 
   const agentContext = useMemo(
-    () => buildAgentContext(mergedSensors, mergedEvents),
-    [mergedSensors, mergedEvents],
+    () => buildAgentContext(mergedSensors, mergedEvents, mergedNotifs),
+    [mergedSensors, mergedEvents, mergedNotifs],
   );
   const timelineItems = useMemo(
     () => buildActivityTimelineItems(mergedSensors, mergedNotifs),
@@ -239,7 +239,7 @@ export default function DashboardHome() {
           humidity={sensorData?.humidity}
         />
         <div className="dash-main-right">
-          <CryPredictionPanel cryStatus={cryStatus} events={mergedEvents} />
+          <CryPredictionPanel notifications={mergedNotifs} />
         </div>
       </div>
 
@@ -257,7 +257,7 @@ export default function DashboardHome() {
 
       <CryAlertPopup alert={activeAlert} onDismiss={() => setActiveAlert(null)} />
 
-      <NurseryCoachFab agentContext={agentContext} title="Nursery coach" />
+      <NurseryCoachFab agentContext={agentContext} title="Cry Guard Assistant" />
 
       <CryAlertDetailModal
         open={detailModalOpen}

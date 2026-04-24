@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import {
-  lensReasonHistogram,
-  lensReasonBreakdown,
+  lensReasonHistogramFromCryLabels,
+  lensReasonBreakdownFromCryLabels,
   LENS_GRID_ORDER,
 } from '../utils/analyticsData';
 
@@ -9,74 +9,37 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
-function defaultRows(crying) {
-  if (crying) {
-    return [
-      { label: 'SILENCE / PEACE', pct: 15, bar: 'short' },
-      { label: 'HUNGRY', pct: 48, bar: 'mid' },
-      { label: 'TIRED', pct: 32, bar: 'mid2' },
-    ];
-  }
-  return [
-    { label: 'SILENCE / PEACE', pct: 82, bar: 'long' },
-    { label: 'HUNGRY', pct: 12, bar: 'short' },
-    { label: 'TIRED', pct: 4, bar: 'tiny' },
-  ];
+/** Top three buckets by count — same totals as the grid (Mongo cry_label only). */
+function topBarRowsFromHistogram(hist) {
+  const total = hist.reduce((s, h) => s + h.count, 0);
+  if (!total) return null;
+  const bars = ['long', 'mid', 'mid2'];
+  return [...hist]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3)
+    .map((h, i) => ({
+      label: LENS_GRID_ORDER.find(([s]) => s === h.reason)?.[1] ?? h.reason,
+      pct: Math.round((h.count / total) * 100),
+      bar: bars[i] ?? 'mid2',
+    }));
 }
 
-/** Map merged cry reasons to the three-row UI; remaining mass in SILENCE / PEACE. */
-function fromDistribution(hist, crying) {
-  if (!hist?.length) return null;
-  const map = Object.fromEntries(hist.map((h) => [h.reason, h.count]));
-  const hungry = map['Hungry'] || 0;
-  const tired = map['Tired / Sleepy'] || 0;
-  const discomfort = map['Discomfort'] || 0;
-  const other = Math.max(0, hist.reduce((s, h) => s + h.count, 0) - hungry - tired - discomfort);
-  const total = hungry + tired + discomfort + other || 1;
-  const hungryPct = Math.round((hungry / total) * 100);
-  const tiredPct = Math.round((tired / total) * 100);
-  const discomfortPct = Math.round((discomfort / total) * 100);
-  const peace = clamp(100 - hungryPct - tiredPct - Math.max(discomfortPct, Math.round((other / total) * 100)), 0, 100);
-  if (crying) {
-    return [
-      { label: 'SILENCE / PEACE', pct: clamp(Math.round(peace * 0.35), 5, 40), bar: 'short' },
-      { label: 'HUNGRY', pct: Math.max(hungryPct, 28), bar: 'mid' },
-      { label: 'TIRED', pct: Math.max(tiredPct, 18), bar: 'mid2' },
-    ];
-  }
-  return [
-    { label: 'SILENCE / PEACE', pct: clamp(Math.max(peace, 55), 40, 92), bar: 'long' },
-    { label: 'HUNGRY', pct: clamp(hungryPct || 8, 4, 40), bar: 'short' },
-    { label: 'TIRED', pct: clamp(tiredPct || 4, 2, 35), bar: 'tiny' },
-  ];
-}
-
-/** Demo grid when no merged events yet */
+/** Placeholder grid when nothing is labeled yet */
 const EMPTY_GRID_PCTS = {
-  Discomfort: 2,
-  'Belly pain': 1,
-  Burping: 1,
-  'Cold/Hot': 0,
-  'Cry alert': 0,
-  Other: 0,
+  belly_pain: 0,
+  burping: 0,
+  cold_hot: 0,
+  discomfort: 0,
+  hungry: 0,
+  tired: 0,
 };
 
-export default function CryPredictionPanel({ cryStatus, events }) {
-  const crying = cryStatus?.cry_detected;
+export default function CryPredictionPanel({ notifications }) {
+  const hist = useMemo(() => lensReasonHistogramFromCryLabels(notifications || []), [notifications]);
 
-  const hist = useMemo(() => {
-    const list = events || [];
-    if (!list.length) return null;
-    return lensReasonHistogram(list);
-  }, [events]);
+  const breakdown = useMemo(() => lensReasonBreakdownFromCryLabels(notifications || []), [notifications]);
 
-  const breakdown = useMemo(() => lensReasonBreakdown(events || []), [events]);
-
-  const main = useMemo(() => {
-    const fromHist = fromDistribution(hist, crying);
-    if (fromHist) return fromHist;
-    return defaultRows(crying);
-  }, [crying, hist]);
+  const main = useMemo(() => topBarRowsFromHistogram(hist), [hist]);
 
   const gridPct = (slug) => {
     if (!breakdown.total) return EMPTY_GRID_PCTS[slug] ?? 0;
@@ -87,22 +50,25 @@ export default function CryPredictionPanel({ cryStatus, events }) {
     <section className="dash-cry-card">
       <h3 className="dash-cry-title">Cry reason lens</h3>
       <p className="dash-cry-sub">
-        All model-style tags with share of merged events (Burping, Belly pain, Cold/Hot, etc.)
+        Share of loaded notifications that have a multiclass cry_label in MongoDB (last fetch window). Cohort CSV rows
+        are not mixed into this chart.
       </p>
-      <ul className="dash-cry-rows">
-        {main.map((row) => (
-          <li key={row.label} className="dash-cry-row">
-            <span className="dash-cry-label">{row.label}</span>
-            <div className="dash-cry-bar-track">
-              <span
-                className={`dash-cry-bar-fill ${row.bar === 'long' ? 'primary' : 'muted'}`}
-                style={{ width: `${clamp(row.pct, 0, 100)}%` }}
-              />
-            </div>
-            <span className="dash-cry-pct">{row.pct}%</span>
-          </li>
-        ))}
-      </ul>
+      {main && (
+        <ul className="dash-cry-rows">
+          {main.map((row) => (
+            <li key={row.label} className="dash-cry-row">
+              <span className="dash-cry-label">{row.label}</span>
+              <div className="dash-cry-bar-track">
+                <span
+                  className={`dash-cry-bar-fill ${row.bar === 'long' ? 'primary' : 'muted'}`}
+                  style={{ width: `${clamp(row.pct, 0, 100)}%` }}
+                />
+              </div>
+              <span className="dash-cry-pct">{row.pct}%</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="dash-cry-grid dash-cry-grid--tags">
         {LENS_GRID_ORDER.map(([slug, label]) => (
           <div key={slug} className="dash-cry-cell">
@@ -111,7 +77,10 @@ export default function CryPredictionPanel({ cryStatus, events }) {
         ))}
       </div>
       {!breakdown.total && (
-        <p className="dash-cry-hint">Connect data to replace demo shares above with live counts.</p>
+        <p className="dash-cry-hint">
+          No multiclass cry_label on notifications in this window (binary cry/no_cry labels are ignored). Load more
+          history or wait for labeled alerts.
+        </p>
       )}
     </section>
   );
