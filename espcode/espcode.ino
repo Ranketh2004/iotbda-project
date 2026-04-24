@@ -1,8 +1,9 @@
 #include <WiFi.h>
-#include <HTTPClient.h>][;]
+#include <HTTPClient.h>
 #include <WebSocketsClient.h>
 #include <driver/i2s.h>
 #include <DHT.h>
+#include <math.h>
 
 // ======================== WiFi Config ========================
 const char* WIFI_SSID     = "Dialog 4G 018";
@@ -52,7 +53,18 @@ const float HUM_MIN  = 0.0;
 const float HUM_MAX  = 100.0;
 
 const float ALPHA = 0.3;               // exponential smoothing factor
-const int AUDIO_ACTIVITY_THRESHOLD = 4000; // basic sound threshold
+const int AUDIO_ACTIVITY_THRESHOLD = 300; // basic sound threshold
+
+// PIR filtering settings
+const unsigned long PIR_WARMUP_MS = 90000;          // ignore PIR during startup stabilization
+const unsigned long PIR_SAMPLE_INTERVAL_MS = 100;   // read PIR every 100ms
+const int PIR_READ_SAMPLES = 11;                    // fast oversampling per read
+const int PIR_READ_DELAY_MS = 1;
+const float PIR_HIGH_RATIO = 0.82f;                 // require ~82% highs per instant read
+const unsigned long PIR_ASSERT_MS = 1200;           // high must stay stable for 1.2s
+const unsigned long PIR_CLEAR_MS = 1800;            // low must stay stable for 1.8s
+const unsigned long PIR_COOLDOWN_MS = 3000;         // ignore new triggers right after clear
+const unsigned long PIR_MAX_ON_MS = 15000;          // fail-safe for stuck-high modules
 
 // ======================== WebSocket Audio Stream =============
 WebSocketsClient webSocket;
@@ -68,6 +80,14 @@ int cryBufferOffset = 0;
 // ======================== Timing =============================
 unsigned long lastSensorSend = 0;
 unsigned long sensorInterval = 5000;      // send sensor data every 5s
+unsigned long pirWarmupUntil = 0;
+unsigned long lastPirSample = 0;
+
+bool pirMotionState = false;
+bool pirCandidateHigh = false;
+unsigned long pirCandidateSince = 0;
+unsigned long pirMotionStartedMs = 0;
+unsigned long pirCooldownUntil = 0;
 
 // ======================== Helpers ============================
 bool isValidTemperature(float t) {
@@ -83,7 +103,11 @@ float smoothValue(float newValue, float oldValue) {
   return (ALPHA * newValue) + ((1.0 - ALPHA) * oldValue);
 }
 
-int stableDigitalRead(int pin, int samples = 5, int delayMs = 5) {
+int stableDigitalRead(int pin, int samples = 5, int delayMs = 5, float highRatio = 0.5f) {
+  if (samples <= 0) return LOW;
+  if (highRatio < 0.0f) highRatio = 0.0f;
+  if (highRatio > 1.0f) highRatio = 1.0f;
+
   int highCount = 0;
   for (int i = 0; i < samples; i++) {
     if (digitalRead(pin) == HIGH) {
@@ -91,7 +115,51 @@ int stableDigitalRead(int pin, int samples = 5, int delayMs = 5) {
     }
     delay(delayMs);
   }
-  return (highCount > samples / 2) ? HIGH : LOW;
+  int requiredHighCount = (int)ceil(samples * highRatio);
+  return (highCount >= requiredHighCount) ? HIGH : LOW;
+}
+
+void updatePirState() {
+  unsigned long now = millis();
+  if (now < pirWarmupUntil) {
+    pirMotionState = false;
+    pirCandidateHigh = false;
+    pirCandidateSince = now;
+    pirMotionStartedMs = 0;
+    pirCooldownUntil = 0;
+    return;
+  }
+
+  bool instantHigh = (stableDigitalRead(PIRPIN, PIR_READ_SAMPLES, PIR_READ_DELAY_MS, PIR_HIGH_RATIO) == HIGH);
+
+  if (instantHigh != pirCandidateHigh) {
+    pirCandidateHigh = instantHigh;
+    pirCandidateSince = now;
+  }
+
+  unsigned long stableForMs = now - pirCandidateSince;
+
+  if (!pirMotionState) {
+    if (now < pirCooldownUntil) return;
+    if (pirCandidateHigh && stableForMs >= PIR_ASSERT_MS) {
+      pirMotionState = true;
+      pirMotionStartedMs = now;
+      Serial.println("[PIR] Motion asserted.");
+    }
+    return;
+  }
+
+  bool clearByLow = (!pirCandidateHigh && stableForMs >= PIR_CLEAR_MS);
+  bool clearByTimeout = (pirMotionStartedMs > 0 && (now - pirMotionStartedMs) >= PIR_MAX_ON_MS);
+  if (clearByLow || clearByTimeout) {
+    pirMotionState = false;
+    pirCooldownUntil = now + PIR_COOLDOWN_MS;
+    if (clearByTimeout) {
+      Serial.println("[PIR] Motion cleared by max-on timeout.");
+    } else {
+      Serial.println("[PIR] Motion cleared by stable low.");
+    }
+  }
 }
 
 bool isAudioChunkUseful(int16_t* buffer, size_t sampleCount) {
@@ -218,7 +286,6 @@ void sendSensorData() {
   float hu = dht.readHumidity();
   float tc = dht.readTemperature();
 
-  int motionRaw = stableDigitalRead(PIRPIN);
   int lightRaw  = stableDigitalRead(LDRPIN);
 
   bool tempValid = isValidTemperature(tc);
@@ -245,7 +312,8 @@ void sendSensorData() {
     return;
   }
 
-  bool motion = (motionRaw == HIGH);
+  bool pirReady = millis() >= pirWarmupUntil;
+  bool motion = pirReady ? pirMotionState : false;
   bool lightDark = (lightRaw == HIGH);
 
   lastValidMotion = motion;
@@ -255,6 +323,10 @@ void sendSensorData() {
                 tc, hu,
                 motion ? "YES" : "NO",
                 lightDark ? "DARK" : "BRIGHT");
+  if (!pirReady) {
+    unsigned long remainMs = pirWarmupUntil - millis();
+    Serial.printf("[PIR] Warmup active: %lu s remaining\n", remainMs / 1000);
+  }
 
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
@@ -328,10 +400,14 @@ void setup() {
   Serial.println("========================================");
 
   dht.begin();
-  pinMode(PIRPIN, INPUT);
+  pinMode(PIRPIN, INPUT_PULLDOWN);
   pinMode(LDRPIN, INPUT);
-  Serial.println("[Sensor] DHT22, PIR, LDR initialized.");
+  Serial.println("[Sensor] Waiting for PIR sensor to stabilize...");
+  pirWarmupUntil = millis() + PIR_WARMUP_MS;
+  pirCandidateSince = millis();
+  delay(60000);
 
+  Serial.println("[Sensor] DHT22, PIR, LDR initialized.");
   i2sInit();
 
   cryBuffer = (uint8_t*)malloc(AUDIO_CHUNK_BYTES);
@@ -359,6 +435,11 @@ void loop() {
   unsigned long now = millis();
 
   webSocket.loop();
+
+  if (now - lastPirSample >= PIR_SAMPLE_INTERVAL_MS) {
+    lastPirSample = now;
+    updatePirState();
+  }
 
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[WiFi] Disconnected. Reconnecting...");

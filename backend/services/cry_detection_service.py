@@ -1,7 +1,7 @@
 import os
 import logging
 import numpy as np
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 # Suppress TF logs
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -54,7 +54,7 @@ class CryDetectionService:
         except Exception as e:
             logger.error(f"Failed to load model: {str(e)}")
 
-    def detect_cry(self, audio_features: np.ndarray) -> Tuple[bool, Optional[float]]:
+    def detect_cry(self, audio_features: np.ndarray) -> Tuple[bool, Optional[float], dict[str, Any]]:
         """
         Run preprocessed audio features through the model.
 
@@ -64,7 +64,7 @@ class CryDetectionService:
         """
         if self.model is None:
             logger.warning("Model is not loaded. Cannot perform prediction.")
-            return False, None
+            return False, None, {}
 
         try:
             pred = self.model.predict(audio_features, verbose=0)
@@ -77,7 +77,10 @@ class CryDetectionService:
                 logger.info(
                     f"P(crying)={prob_cry:.4f} threshold={settings.CRY_PROBABILITY_THRESHOLD} -> {detected}"
                 )
-                return detected, prob_cry
+                return detected, prob_cry, {
+                    "prediction_type": "binary",
+                    "cry_label": "cry" if detected else "no_cry",
+                }
 
             # Multi-class softmax (optional / legacy; train_model.py uses binary only)
             idx = int(np.argmax(pred, axis=-1).flat[0])
@@ -89,11 +92,17 @@ class CryDetectionService:
                 f"(need max_prob>={min_conf})"
             )
             detected = max_prob >= min_conf
-            return detected, max_prob
+            return detected, max_prob, {
+                "prediction_type": "multiclass",
+                "prediction_index": idx,
+                "cry_label": label,
+                "max_prob": max_prob,
+                "min_required_prob": min_conf,
+            }
 
         except Exception as e:
             logger.error(f"Error during model prediction: {str(e)}")
-            return False, None
+            return False, None, {}
 
 
 # Instantiate service as a singleton to load the model once when server starts

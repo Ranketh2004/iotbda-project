@@ -10,7 +10,9 @@ const API_BASE =
  * Fetch the latest sensor data from MongoDB via the REST API.
  */
 export async function fetchSensorData() {
-  const res = await fetch(`${API_BASE}/api/sensor-data`);
+  const res = await fetch(`${API_BASE}/api/sensor-data`, {
+    headers: { ...authHeaders() },
+  });
   if (!res.ok) throw new Error(`Failed to fetch sensor data: ${res.status}`);
   return res.json();
 }
@@ -20,7 +22,9 @@ export async function fetchSensorData() {
  * @param {number} limit - Number of records to fetch (default 50)
  */
 export async function fetchSensorHistory(limit = 50) {
-  const res = await fetch(`${API_BASE}/api/sensor-data/history?limit=${limit}`);
+  const res = await fetch(`${API_BASE}/api/sensor-data/history?limit=${limit}`, {
+    headers: { ...authHeaders() },
+  });
   if (!res.ok) throw new Error(`Failed to fetch sensor history: ${res.status}`);
   return res.json();
 }
@@ -29,7 +33,9 @@ export async function fetchSensorHistory(limit = 50) {
  * Fetch the full system status from MongoDB.
  */
 export async function fetchStatus() {
-  const res = await fetch(`${API_BASE}/api/status`);
+  const res = await fetch(`${API_BASE}/api/status`, {
+    headers: { ...authHeaders() },
+  });
   if (!res.ok) throw new Error(`Failed to fetch status: ${res.status}`);
   return res.json();
 }
@@ -39,7 +45,9 @@ export async function fetchStatus() {
  * @param {number} limit - Number of notifications to fetch (default 50)
  */
 export async function fetchNotifications(limit = 50) {
-  const res = await fetch(`${API_BASE}/api/notifications?limit=${limit}`);
+  const res = await fetch(`${API_BASE}/api/notifications?limit=${limit}`, {
+    headers: { ...authHeaders() },
+  });
   if (!res.ok) throw new Error(`Failed to fetch notifications: ${res.status}`);
   return res.json();
 }

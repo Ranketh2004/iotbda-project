@@ -23,11 +23,17 @@ class Settings:
     MAX_FREQ: int = 8000
     EXPECTED_FRAMES = 313
     # Binary cry model: probability above this counts as crying (sigmoid output)
-    CRY_PROBABILITY_THRESHOLD: float = float(os.getenv("CRY_PROBABILITY_THRESHOLD", "0.5"))
+    CRY_PROBABILITY_THRESHOLD: float = float(os.getenv("CRY_PROBABILITY_THRESHOLD", "0.42"))
     # Skip neural net when waveform RMS is below this (silence / line noise); librosa float audio in [-1, 1]
-    MIN_AUDIO_RMS: float = float(os.getenv("MIN_AUDIO_RMS", "0.012"))
+    MIN_AUDIO_RMS: float = float(os.getenv("MIN_AUDIO_RMS", "0.004"))
     # Multi-class softmax: require top class this confident (reduces false cries on ambiguous input)
     CRY_MULTICLASS_MIN_CONFIDENCE: float = float(os.getenv("CRY_MULTICLASS_MIN_CONFIDENCE", "0.58"))
+    # Alert policy: allow microphone-only cry alert when confidence is high enough.
+    # Useful when baby is far from PIR sensor but audible on microphone.
+    ALLOW_MIC_ONLY_CRY_ALERT: bool = os.getenv("ALLOW_MIC_ONLY_CRY_ALERT", "true").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+    MIC_ONLY_CRY_MIN_PROBABILITY: float = float(os.getenv("MIC_ONLY_CRY_MIN_PROBABILITY", "0.65"))
 
     # MongoDB
     MONGO_URI: str = os.getenv("MONGO_URI", "")
