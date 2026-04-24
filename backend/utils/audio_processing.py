@@ -7,11 +7,14 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-def preprocess_audio(audio_bytes: bytes) -> np.ndarray:
+def preprocess_audio(audio_bytes: bytes):
     """
-    Convert raw audio bytes to a mel spectrogram.
+    Convert raw audio bytes to MFCC features for the CNN.
     Expected audio format: raw PCM or WAV mono, 16kHz
-    Returns a numpy array representing the normalized mel spectrogram features.
+
+    Returns:
+        (features, rms_energy): features shape (1, n_mfcc, T, 1); rms_energy is waveform
+        RMS in [0, 1] on librosa's float waveform (use for silence / noise gating).
     """
     try:
         # Load audio from bytes
@@ -21,6 +24,9 @@ def preprocess_audio(audio_bytes: bytes) -> np.ndarray:
         
         # Load with target sample rate, mono
         y, sr = librosa.load(audio_file, sr=settings.SAMPLE_RATE, mono=True)
+
+        # RMS on float waveform — silence is near 0; gating avoids bogus CNN input after normalization
+        rms_energy = float(np.sqrt(np.mean(np.square(y.astype(np.float64)))))
 
         mfcc = librosa.feature.mfcc(y=y, 
                                     sr=sr, 
@@ -42,7 +48,7 @@ def preprocess_audio(audio_bytes: bytes) -> np.ndarray:
         mfcc = np.expand_dims(mfcc, axis=0)
 
         mfcc = (mfcc - np.mean(mfcc)) / (np.std(mfcc) + 1e-6)  # Normalize MFCC features
-        return mfcc
+        return mfcc, rms_energy
     
         # # Extract Mel Spectrogram
         # mel_spectrogram = librosa.feature.melspectrogram(

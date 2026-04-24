@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage';
 import DashboardHome from './pages/DashboardHome';
 import AnalyticsPage from './pages/AnalyticsPage';
 import SettingsPage from './pages/SettingsPage';
+import DailyCareLogPage from './pages/DailyCareLogPage';
 import NotificationHistoryPage from './pages/NotificationHistoryPage';
 import AlertSettingsPage from './pages/AlertSettingsPage';
 import ProfilePage from './pages/ProfilePage';
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="alert-escalation" element={<AlertEscalationPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="daily-care" element={<DailyCareLogPage />} />
         <Route path="notifications/settings" element={<AlertSettingsPage />} />
         <Route path="notifications" element={<NotificationHistoryPage />} />
         <Route path="profile" element={<ProfilePage />} />

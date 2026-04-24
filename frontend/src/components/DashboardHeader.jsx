@@ -8,6 +8,7 @@ const BRAND = 'Infant Cry Guard';
 const links = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/dashboard/analytics', label: 'Analytics' },
+  { to: '/dashboard/daily-care', label: 'Daily care' },
   { to: '/dashboard/settings', label: 'Settings' },
 ];
 

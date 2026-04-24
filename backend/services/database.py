@@ -40,6 +40,11 @@ class Database:
             await self.db.notifications.create_index("timestamp", unique=False)
             await self.db.users.create_index("email", unique=True)
             await self.db.users.create_index("phone", unique=True, sparse=True)
+            await self.db.parent_care_logs.create_index(
+                [("user_id", 1), ("entry_date", 1)],
+                unique=True,
+            )
+            await self.db.parent_care_logs.create_index("created_at", unique=False)
             logger.info("MongoDB indexes created.")
         except Exception as e:
             print(f"MongoDB connection failed: {e}")
@@ -220,6 +225,55 @@ class Database:
             return True
         r = await self.db.users.update_one({"_id": oid}, cmd)
         return r.matched_count > 0
+
+    # ── Parent daily care log (CSV-aligned fields) ───────────
+
+    async def upsert_parent_care_log(self, user_id: str, entry_date: str, doc: dict) -> str:
+        """
+        One document per user per entry_date (YYYY-MM-DD).
+        doc should not include user_id/entry_date (passed separately).
+        """
+        now = datetime.now(timezone.utc)
+        payload = {**doc, "user_id": user_id, "entry_date": entry_date, "updated_at": now}
+        result = await self.db.parent_care_logs.update_one(
+            {"user_id": user_id, "entry_date": entry_date},
+            {"$set": payload, "$setOnInsert": {"created_at": now}},
+            upsert=True,
+        )
+        if result.upserted_id:
+            return str(result.upserted_id)
+        existing = await self.db.parent_care_logs.find_one({"user_id": user_id, "entry_date": entry_date})
+        return str(existing["_id"]) if existing else ""
+
+    async def get_parent_care_logs_for_user(self, user_id: str, limit: int = 60) -> list:
+        cursor = self.db.parent_care_logs.find({"user_id": user_id}).sort("entry_date", -1).limit(limit)
+        docs = await cursor.to_list(length=limit)
+        for doc in docs:
+            doc["_id"] = str(doc["_id"])
+        return docs
+
+    async def get_parent_care_log_by_user_and_date(self, user_id: str, entry_date: str) -> dict | None:
+        doc = await self.db.parent_care_logs.find_one({"user_id": user_id, "entry_date": entry_date})
+        if doc:
+            doc["_id"] = str(doc["_id"])
+        return doc
+
+    async def query_sensor_data_range(self, start_ts: float, end_ts: float, limit: int = 30000) -> list:
+        """Sensor rows whose numeric timestamp falls in [start_ts, end_ts)."""
+        q = {"timestamp": {"$gte": start_ts, "$lt": end_ts}}
+        cursor = self.db.sensor_data.find(q, {"timestamp": 1, "motion": 1, "_id": 0}).sort("timestamp", 1).limit(
+            limit
+        )
+        return await cursor.to_list(length=limit)
+
+    async def query_notifications_range(self, start_ts: float, end_ts: float, limit: int = 8000) -> list:
+        q = {"timestamp": {"$gte": start_ts, "$lt": end_ts}}
+        cursor = (
+            self.db.notifications.find(q, {"timestamp": 1, "message": 1, "type": 1, "_id": 0})
+            .sort("timestamp", 1)
+            .limit(limit)
+        )
+        return await cursor.to_list(length=limit)
 
     async def set_user_photo(self, user_id: str, role: str, photo_doc: dict) -> bool:
         from bson import ObjectId

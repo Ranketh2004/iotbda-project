@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { fetchStatus } from '../services/api';
+import { fetchStatus, fetchSensorHistory, fetchNotifications } from '../services/api';
 import DashboardHeader from '../components/DashboardHeader';
 import DeviceHeroCard from '../components/DeviceHeroCard';
 import SensorGrid from '../components/SensorGrid';
@@ -13,7 +13,18 @@ import CriticalAlerts from '../components/CriticalAlerts';
 import DashboardFooter from '../components/DashboardFooter';
 import CryAlertPopup from '../components/CryAlertPopup';
 import CryAlertDetailModal from '../components/CryAlertDetailModal';
+import NurseryCoachFab from '../components/NurseryCoachFab';
 import { BABY_AGE_LABELS } from '../constants/userProfile';
+import {
+  mergeSensorHistory,
+  mergeNotifications,
+  mergeCryEvents,
+  getCsvSensorHistory,
+  getCsvNotifications,
+  getCsvCryEvents,
+  buildAgentContext,
+  buildActivityTimelineItems,
+} from '../utils/analyticsData';
 
 const POLL_INTERVAL = 5000;
 
@@ -35,6 +46,40 @@ export default function DashboardHome() {
   });
   const [activeAlert, setActiveAlert] = useState(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+
+  const [mergedSensors, setMergedSensors] = useState([]);
+  const [mergedEvents, setMergedEvents] = useState([]);
+  const [mergedNotifs, setMergedNotifs] = useState([]);
+
+  const loadAnalyticsMerge = useCallback(async () => {
+    try {
+      const [histRes, notifRes] = await Promise.all([
+        fetchSensorHistory(160).catch(() => ({ data: [] })),
+        fetchNotifications(100).catch(() => ({ notifications: [] })),
+      ]);
+      const mongoS = histRes?.data || [];
+      const mongoN = notifRes?.notifications || [];
+      const csvS = getCsvSensorHistory();
+      const csvN = getCsvNotifications();
+      const csvCry = getCsvCryEvents();
+      const ms = mergeSensorHistory(mongoS, csvS);
+      const mn = mergeNotifications(mongoN, csvN);
+      const ev = mergeCryEvents(csvCry, mn, ms);
+      setMergedSensors(ms);
+      setMergedNotifs(mn);
+      setMergedEvents(ev);
+    } catch (err) {
+      console.error('[analytics merge]', err);
+      const csvS = getCsvSensorHistory();
+      const csvN = getCsvNotifications();
+      const csvCry = getCsvCryEvents();
+      const ms = mergeSensorHistory([], csvS);
+      const mn = mergeNotifications([], csvN);
+      setMergedSensors(ms);
+      setMergedNotifs(mn);
+      setMergedEvents(mergeCryEvents(csvCry, mn, ms));
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +114,12 @@ export default function DashboardHome() {
   }, []);
 
   useEffect(() => {
+    loadAnalyticsMerge();
+    const id = setInterval(loadAnalyticsMerge, 60000);
+    return () => clearInterval(id);
+  }, [loadAnalyticsMerge]);
+
+  useEffect(() => {
     const loadInitialData = async () => {
       try {
         const status = await fetchStatus();
@@ -96,6 +147,15 @@ export default function DashboardHome() {
 
     return () => clearInterval(interval);
   }, []);
+
+  const agentContext = useMemo(
+    () => buildAgentContext(mergedSensors, mergedEvents),
+    [mergedSensors, mergedEvents],
+  );
+  const timelineItems = useMemo(
+    () => buildActivityTimelineItems(mergedSensors, mergedNotifs),
+    [mergedSensors, mergedNotifs],
+  );
 
   const handleCryAlert = useCallback((data, notification) => {
     setCryStatus(data);
@@ -174,24 +234,30 @@ export default function DashboardHome() {
 
       <div className="dash-main-grid">
         <EnvironmentTrends
+          series={mergedSensors}
           temperature={sensorData?.temperature}
           humidity={sensorData?.humidity}
         />
         <div className="dash-main-right">
-          <CryPredictionPanel cryStatus={cryStatus} />
+          <CryPredictionPanel cryStatus={cryStatus} events={mergedEvents} />
         </div>
       </div>
 
       <ListenButton onCryAlert={handleCryAlert} />
 
-      <div className="dash-bottom-grid">
-        <ActivityTimeline />
+      <div className="dash-coach-grid">
+        <ActivityTimeline items={timelineItems} />
+      </div>
+
+      <div className="dash-post-coach">
         <CriticalAlerts />
       </div>
 
       <DashboardFooter />
 
       <CryAlertPopup alert={activeAlert} onDismiss={() => setActiveAlert(null)} />
+
+      <NurseryCoachFab agentContext={agentContext} title="Nursery coach" />
 
       <CryAlertDetailModal
         open={detailModalOpen}

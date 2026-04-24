@@ -1,44 +1,47 @@
 import React from 'react';
-import { Moon, Sun, Activity as ActivityIcon } from 'lucide-react';
+import { Moon, Sun, Activity as ActivityIcon, Volume2 } from 'lucide-react';
 
-const EVENTS = [
-  {
-    id: '1',
-    title: 'Deep Sleep Detected',
-    meta: '2:30 PM • 1h 45m duration',
-    icon: Moon,
-    tone: 'blue',
-  },
-  {
-    id: '2',
-    title: 'Slight Movement',
-    meta: '1:15 PM • Crib shaking detected',
-    icon: ActivityIcon,
-    tone: 'orange',
-  },
-  {
-    id: '3',
-    title: 'Woke Up - Brief',
-    meta: '11:00 AM • Morning cycle ended',
-    icon: Sun,
-    tone: 'blue',
-  },
-];
+const KIND_ICON = {
+  cry: Volume2,
+  motion: ActivityIcon,
+  light: Sun,
+  rest: Moon,
+};
 
-export default function ActivityTimeline() {
+const KIND_TONE = {
+  cry: 'orange',
+  motion: 'orange',
+  light: 'blue',
+  rest: 'blue',
+};
+
+export default function ActivityTimeline({ items }) {
+  const list = items?.length
+    ? items
+    : [
+        {
+          id: 'placeholder',
+          title: 'Waiting for merged timeline',
+          meta: 'Connect the device or refresh — cohort CSV still backs the merged timeline.',
+          kind: 'rest',
+        },
+      ];
+
   return (
     <section className="dash-timeline-card" aria-labelledby="timeline-heading">
       <h3 id="timeline-heading" className="dash-timeline-title">
-        Activity Timeline
+        Activity timeline
       </h3>
+      <p className="dash-timeline-sub">Cry alerts and motion edges from MongoDB + nutrition cohort CSV</p>
       <ol className="dash-timeline-list">
-        {EVENTS.map((ev, i) => {
-          const Icon = ev.icon;
-          const last = i === EVENTS.length - 1;
+        {list.map((ev, i) => {
+          const Icon = KIND_ICON[ev.kind] || Moon;
+          const tone = KIND_TONE[ev.kind] || 'blue';
+          const last = i === list.length - 1;
           return (
             <li key={ev.id} className="dash-timeline-item">
               <div className="dash-timeline-track">
-                <span className={`dash-timeline-dot dash-timeline-dot--${ev.tone}`}>
+                <span className={`dash-timeline-dot dash-timeline-dot--${tone}`}>
                   <Icon size={16} strokeWidth={2} />
                 </span>
                 {!last && <span className="dash-timeline-line" aria-hidden />}

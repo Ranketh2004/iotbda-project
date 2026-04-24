@@ -1,6 +1,8 @@
 import os
 import logging
 import numpy as np
+from typing import Optional, Tuple
+
 # Suppress TF logs
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -18,11 +20,16 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+
 class CryDetectionService:
     def __init__(self):
         self.model = None
+        self._output_dim: Optional[int] = None
         self.load_model()
-        self.class_names = ['belly pain', 'burping', 'cold_hot', 'discomfort', 'hungry', 'tired']
+        # Only used if a multi-class softmax model is loaded (not the default train_model.py binary head)
+        self.class_names = [
+            "belly pain", "burping", "cold_hot", "discomfort", "hungry", "tired",
+        ]
 
     def load_model(self):
         """
@@ -34,35 +41,60 @@ class CryDetectionService:
         try:
             if os.path.exists(settings.MODEL_PATH):
                 self.model = tf.keras.models.load_model(settings.MODEL_PATH)
-                logger.info(f"Successfully loaded model from {settings.MODEL_PATH}")
+                out = self.model.output_shape
+                # output_shape can be (None, 1) or (None, N)
+                self._output_dim = int(out[-1]) if out[-1] is not None else None
+                logger.info(
+                    f"Successfully loaded model from {settings.MODEL_PATH} (output_dim={self._output_dim})"
+                )
             else:
-                logger.warning(f"Model file not found at {settings.MODEL_PATH}. Prediction will return False.")
+                logger.warning(
+                    f"Model file not found at {settings.MODEL_PATH}. Prediction will return False."
+                )
         except Exception as e:
             logger.error(f"Failed to load model: {str(e)}")
 
-    def detect_cry(self, audio_features: np.ndarray) -> bool:
+    def detect_cry(self, audio_features: np.ndarray) -> Tuple[bool, Optional[float]]:
         """
-        Run the preprocessed audio features through the model.
-        Returns True if a baby cry is detected, False otherwise.
+        Run preprocessed audio features through the model.
+
+        Trained model (train_model.py) is binary: single sigmoid = P(crying).
+        Returns (cry_detected, probability) where probability is P(crying) for binary models,
+        or None if unavailable / error.
         """
         if self.model is None:
             logger.warning("Model is not loaded. Cannot perform prediction.")
-            return False
+            return False, None
 
         try:
-            # Predict
-            pred_probs = self.model.predict(audio_features)
-            logger.info(f"Model prediction probabilities: {pred_probs}")
+            pred = self.model.predict(audio_features, verbose=0)
+            out_dim = self._output_dim if self._output_dim is not None else int(pred.shape[-1])
 
-            prediction = np.argmax(pred_probs)
-            predicted_label = self.class_names[prediction] if prediction < len(self.class_names) else "unknown"
-            logger.info(f"Predicted class: {predicted_label} (index {prediction})")
+            if out_dim == 1:
+                # Binary sigmoid: column is P(crying) vs not (matches train_model.py)
+                prob_cry = float(np.squeeze(pred))
+                detected = prob_cry >= settings.CRY_PROBABILITY_THRESHOLD
+                logger.info(
+                    f"P(crying)={prob_cry:.4f} threshold={settings.CRY_PROBABILITY_THRESHOLD} -> {detected}"
+                )
+                return detected, prob_cry
 
-            return predicted_label
-            
+            # Multi-class softmax (optional / legacy; train_model.py uses binary only)
+            idx = int(np.argmax(pred, axis=-1).flat[0])
+            max_prob = float(np.max(pred))
+            label = self.class_names[idx] if idx < len(self.class_names) else "unknown"
+            min_conf = settings.CRY_MULTICLASS_MIN_CONFIDENCE
+            logger.info(
+                f"Multi-class prediction: index={idx} label={label} max_prob={max_prob:.4f} "
+                f"(need max_prob>={min_conf})"
+            )
+            detected = max_prob >= min_conf
+            return detected, max_prob
+
         except Exception as e:
             logger.error(f"Error during model prediction: {str(e)}")
-            return False
+            return False, None
+
 
 # Instantiate service as a singleton to load the model once when server starts
 cry_service = CryDetectionService()
