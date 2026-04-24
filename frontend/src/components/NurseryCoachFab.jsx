@@ -9,7 +9,7 @@ const DEFAULT_SUGGESTIONS = [
   'Summarise the last 24 hours',
 ];
 
-export default function NurseryCoachFab({ title = 'Nursery coach', suggestions }) {
+export default function NurseryCoachFab({ title = 'Cry Guard Assistant', suggestions }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {

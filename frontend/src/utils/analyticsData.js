@@ -97,18 +97,18 @@ function inferReasonFromCsvRow(row) {
   const intensity = String(row.cry_intensity_avg || '').toLowerCase();
   const feeding = String(row.feeding_type || '').toLowerCase();
   if (nutrition.includes('low') || (feeding.includes('formula') && String(row.water_intake || '').toLowerCase() === 'low')) {
-    return 'Hungry';
+    return 'hungry';
   }
   if (peak.includes('night') || (meal.includes('irregular') && intensity.includes('high'))) {
-    return 'Tired / Sleepy';
+    return 'tired';
   }
   if (intensity.includes('high') || String(row.motion_activity_level || '').toLowerCase() === 'high') {
-    return 'Discomfort';
+    return 'discomfort';
   }
   if (nutrition.includes('balanced') || nutrition.includes('high')) {
-    return 'Cry alert';
+    return 'hungry';
   }
-  return 'Other';
+  return 'discomfort';
 }
 
 function globalCsvMaxDaySec() {
@@ -296,91 +296,126 @@ export function mergeNotifications(mongoList, csvList) {
   const m = mongoList || [];
   const s = csvList || [];
   const map = new Map();
+  let syntheticKey = 0;
   for (const n of [...m, ...s]) {
     const ts = Number(n.timestamp);
     if (!Number.isFinite(ts)) continue;
-    const key = `${ts.toFixed(0)}:${(n.message || '').slice(0, 40)}`;
+    // Mongo docs must dedupe by _id only — old key used ts.toFixed(0)+message and dropped distinct
+    // alerts in the same second with the same template (e.g. multiple cry_label values).
+    const id = n._id != null && n._id !== '' ? String(n._id) : '';
+    const key = id
+      ? `id:${id}`
+      : `syn:${ts}:${String(n.cry_label ?? n.label ?? '')}:${(n.message || '').slice(0, 48)}:${syntheticKey++}`;
     if (!map.has(key)) map.set(key, { ...n, timestamp: ts });
   }
   return Array.from(map.values()).sort((a, b) => b.timestamp - a.timestamp);
 }
 
-const REASON_KEYWORDS = [
-  ['Hungry', ['hunger', 'hungry', 'feeding', 'feed']],
-  ['Tired / Sleepy', ['tired', 'sleep', 'sleepy', 'low energy']],
-  ['Discomfort', ['discomfort', 'warm', 'humidity', 'diaper', 'position', 'environmental']],
-];
-
-/** Canonical buckets for Cry reason lens + classification (order matters in infer). */
+/** Canonical `notifications.cry_label` / multiclass model buckets (display order). */
 export const LENS_REASON_SLUGS = [
-  'Hungry',
-  'Tired / Sleepy',
-  'Discomfort',
-  'Belly pain',
-  'Burping',
-  'Cold/Hot',
-  'Cry alert',
-  'Other',
+  'belly pain',
+  'burping',
+  'cold_hot',
+  'discomfort',
+  'hungry',
+  'tired',
 ];
 
 const LENS_REASON_SET = new Set(LENS_REASON_SLUGS);
 
+function compactCryKey(raw) {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s/_-]+/g, '');
+}
+
+const COMPACT_TO_LENS_SLUG = {
+  bellypain: 'belly pain',
+  burping: 'burping',
+  coldhot: 'cold_hot',
+  discomfort: 'discomfort',
+  hungry: 'hungry',
+  tired: 'tired',
+  tiredsleepy: 'tired',
+};
+
 /**
- * Infer reason from free text (notifications, snippets). More specific patterns first.
+ * Normalize a `notifications.cry_label` (or legacy UI string) to a LENS_REASON_SLUG, or null if unknown / non-reason.
+ */
+export function normalizeCryLabel(raw) {
+  if (raw == null) return null;
+  let t = String(raw).replace(/\uFEFF/g, '').trim();
+  if (!t) return null;
+  // Normalize unusual spaces (NBSP, etc.) so "belly pain" from DB always matches.
+  t = t.replace(/\s+/gu, ' ').trim();
+  const lower = t.toLowerCase();
+  if (['cry', 'no_cry', 'no cry', 'unknown'].includes(lower)) return null;
+  if (LENS_REASON_SET.has(lower)) return lower;
+  const spaced = lower.replace(/\s+/g, ' ');
+  if (LENS_REASON_SET.has(spaced)) return spaced;
+  const c = compactCryKey(t);
+  if (COMPACT_TO_LENS_SLUG[c]) return COMPACT_TO_LENS_SLUG[c];
+  return null;
+}
+
+/**
+ * Infer one of the six lens labels from free text (fallback when cry_label is missing).
+ * More specific patterns first. Returns null when nothing matches.
  */
 export function inferReasonFromMessage(message) {
   const m = String(message || '').toLowerCase();
-  if (!m.trim()) return 'Cry alert';
-  if (/\bburp|\bbelch|\bgas\b/.test(m)) return 'Burping';
-  if (/belly|stomach|colic|cramp|abdominal|tummy/.test(m)) return 'Belly pain';
-  if (/cold|chill|fever|overheat|too\s*hot|too\s*cold|sweat(ing)?/.test(m)) return 'Cold/Hot';
-  for (const [label, keys] of REASON_KEYWORDS) {
-    if (keys.some((k) => m.includes(k))) return label;
-  }
-  return 'Cry alert';
+  if (!m.trim()) return null;
+  if (/\bburp|\bbelch|\bgas\b/.test(m)) return 'burping';
+  if (/belly|stomach|colic|cramp|abdominal|tummy/.test(m)) return 'belly pain';
+  if (/cold|chill|fever|overheat|too\s*hot|too\s*cold|sweat(ing)?/.test(m)) return 'cold_hot';
+  if (/discomfort|warm|humidity|diaper|position|environmental/.test(m)) return 'discomfort';
+  if (/hunger|hungry|feeding|\bfeed\b/.test(m)) return 'hungry';
+  if (/tired|sleep|sleepy|low energy/.test(m)) return 'tired';
+  return null;
 }
 
 /**
- * Map a merged cry event to a canonical lens bucket (uses structured reason when trusted, else text).
+ * Map a merged cry event to a lens bucket: prefer Mongo `cry_label`, then structured reason, then message text.
  */
 export function classifyCryReason(event) {
-  const r = (event?.reason || '').trim();
-  if (r && LENS_REASON_SET.has(r)) return r;
+  const fromDb = normalizeCryLabel(event?.cry_label ?? event?.label);
+  if (fromDb) return fromDb;
+  const fromReason = normalizeCryLabel(event?.reason);
+  if (fromReason) return fromReason;
   const text = String(event?.rawMessage ?? event?.footerLeft ?? event?.message ?? '');
   if (text) {
     const inf = inferReasonFromMessage(text);
-    if (LENS_REASON_SET.has(inf)) return inf;
+    if (inf) return inf;
   }
+  const r = String(event?.reason || '').trim();
   if (r) {
     const inf2 = inferReasonFromMessage(r);
-    if (LENS_REASON_SET.has(inf2)) return inf2;
-    return 'Other';
+    if (inf2) return inf2;
   }
-  return 'Cry alert';
+  return null;
 }
 
-/** Bottom grid in Cry reason lens: slug → display label (everything except HUNGRY / TIRED top bars). */
+/** Cry reason lens grid: slug → short label (matches multiclass / cry_label vocabulary). */
 export const LENS_GRID_ORDER = [
-  ['Discomfort', 'DISCOMFORT'],
-  ['Belly pain', 'BELLY PAIN'],
-  ['Burping', 'BURPING'],
-  ['Cold/Hot', 'COLD/HOT'],
-  ['Cry alert', 'CRY ALERT'],
-  ['Other', 'OTHER'],
+  ['belly pain', 'BELLY PAIN'],
+  ['burping', 'BURPING'],
+  ['cold_hot', 'COLD / HOT'],
+  ['discomfort', 'DISCOMFORT'],
+  ['hungry', 'HUNGRY'],
+  ['tired', 'TIRED'],
 ];
 
 /**
- * Per-bucket counts for all lens categories (for % breakdown).
+ * Per-bucket counts for lens categories. Total is the sum of labeled events only (unlabeled excluded).
  */
 export function lensReasonBreakdown(events) {
   const counts = Object.fromEntries(LENS_REASON_SLUGS.map((k) => [k, 0]));
-  const list = events || [];
-  for (const e of list) {
+  for (const e of events || []) {
     const c = classifyCryReason(e);
-    if (counts[c] !== undefined) counts[c]++;
-    else counts['Other']++;
+    if (c && counts[c] !== undefined) counts[c]++;
   }
-  const total = list.length;
+  const total = LENS_REASON_SLUGS.reduce((s, k) => s + counts[k], 0);
   return { counts, total };
 }
 
@@ -388,6 +423,34 @@ export function lensReasonBreakdown(events) {
 export function lensReasonHistogram(events) {
   const { counts } = lensReasonBreakdown(events);
   return LENS_REASON_SLUGS.map((reason) => ({ reason, count: counts[reason] }));
+}
+
+/**
+ * Lens counts from notification documents only (`cry_label`). No CSV cohort rows, no message inference.
+ */
+export function lensReasonBreakdownFromCryLabels(notifications) {
+  const counts = Object.fromEntries(LENS_REASON_SLUGS.map((k) => [k, 0]));
+  for (const n of notifications || []) {
+    const raw = n?.cry_label ?? n?.label;
+    const c = normalizeCryLabel(raw);
+    if (c && counts[c] !== undefined) counts[c]++;
+  }
+  const total = LENS_REASON_SLUGS.reduce((s, k) => s + counts[k], 0);
+  return { counts, total };
+}
+
+export function lensReasonHistogramFromCryLabels(notifications) {
+  const { counts } = lensReasonBreakdownFromCryLabels(notifications);
+  return LENS_REASON_SLUGS.map((reason) => ({ reason, count: counts[reason] }));
+}
+
+/** Same shape as `reasonHistogram`, from Mongo `cry_label` only. */
+export function reasonHistogramFromCryLabels(notifications) {
+  const { counts } = lensReasonBreakdownFromCryLabels(notifications);
+  return Object.entries(counts)
+    .map(([reason, count]) => ({ reason, count }))
+    .filter((x) => x.count > 0)
+    .sort((a, b) => b.count - a.count);
 }
 function nearestSensorAt(sensors, ts) {
   if (!sensors.length) return null;
@@ -406,7 +469,9 @@ function nearestSensorAt(sensors, ts) {
 export function enrichNotificationAsEvent(n, sensors) {
   const ts = Number(n.timestamp);
   const sn = nearestSensorAt(sensors, ts);
-  const reason = inferReasonFromMessage(n.message);
+  const rawLabel = n.cry_label ?? n.label;
+  const fromLabel = normalizeCryLabel(rawLabel);
+  const reason = fromLabel ?? inferReasonFromMessage(n.message) ?? 'unlabeled';
   const severity =
     /cluster|third|sustained|spike|warm|discomfort|intensity\s+high/i.test(String(n.message)) ? 'critical' : 'mild';
   const confidence =
@@ -420,13 +485,14 @@ export function enrichNotificationAsEvent(n, sensors) {
   const lightIcon = sn?.light_dark ? 'moon' : 'sun';
   return {
     id: `n-${ts}`,
+    cry_label: rawLabel != null ? String(rawLabel) : undefined,
     reason,
     severity,
     confidence,
     confidenceVariant,
     timestamp: ts,
-    icon: reason.includes('Tired') ? 'moon' : reason.includes('Discomfort') ? 'circle' : 'frown',
-    iconTone: reason.includes('Tired') ? 'yellow' : reason.includes('Discomfort') ? 'grey' : 'blue',
+    icon: reason === 'tired' ? 'moon' : reason === 'discomfort' ? 'circle' : 'frown',
+    iconTone: reason === 'tired' ? 'yellow' : reason === 'discomfort' ? 'grey' : 'blue',
     temp: tempStr,
     humidity: humStr,
     light: lightLabel,
@@ -446,7 +512,7 @@ export function mergeCryEvents(csvStructuredEvents, notifications, sensors) {
     const sn = nearestSensorAt(sensors, ts);
     const iconTone =
       e.iconTone ||
-      (e.reason?.includes('Tired') ? 'yellow' : e.reason?.includes('Discomfort') ? 'grey' : 'blue');
+      (e.reason === 'tired' ? 'yellow' : e.reason === 'discomfort' ? 'grey' : 'blue');
     return {
       id: `c-${ts}-${e.reason}`,
       reason: e.reason,
@@ -454,7 +520,7 @@ export function mergeCryEvents(csvStructuredEvents, notifications, sensors) {
       confidence: e.confidence,
       confidenceVariant: e.confidenceVariant,
       timestamp: ts,
-      icon: e.reason?.includes('Tired') ? 'moon' : e.reason?.includes('Discomfort') ? 'circle' : 'frown',
+      icon: e.reason === 'tired' ? 'moon' : e.reason === 'discomfort' ? 'circle' : 'frown',
       iconTone,
       temp: sn?.temperature != null ? `${Number(sn.temperature).toFixed(0)}°C` : '—',
       humidity: sn?.humidity != null ? `${Number(sn.humidity).toFixed(0)}%` : '—',
@@ -590,7 +656,7 @@ export function buildDecisionSupport({ sensors, events }) {
         'Several critical-tagged cries in 24h. Confirm feeding log and consider shortening wake windows by 10–15 minutes.',
     });
   }
-  const hungry = (events || []).filter((e) => String(e.reason).includes('Hungry')).length;
+  const hungry = (events || []).filter((e) => classifyCryReason(e) === 'hungry').length;
   if (hungry >= 4) {
     actions.push({
       priority: 'medium',
@@ -651,8 +717,8 @@ export function exploratoryAgentReply(question, ctx) {
   return `Try: “What’s average humidity?”, “How many cries last 24h?”, or “What should I do?” — Top reason right now: ${topReason || 'unknown'}.`;
 }
 
-export function buildAgentContext(mergedSensors, mergedEvents) {
-  const hist = reasonHistogram(mergedEvents);
+export function buildAgentContext(mergedSensors, mergedEvents, mergedNotifications) {
+  const hist = reasonHistogramFromCryLabels(mergedNotifications ?? []);
   return {
     events: mergedEvents,
     sensors: mergedSensors,
@@ -668,9 +734,12 @@ export function buildActivityTimelineItems(sensors, notifications) {
   const items = [];
   const sns = [...(sensors || [])].filter((s) => s.timestamp != null).sort((a, b) => b.timestamp - a.timestamp);
   for (const n of notifications || []) {
+    const slug = normalizeCryLabel(n.cry_label ?? n.label) ?? inferReasonFromMessage(n.message);
+    const titleRow = slug ? LENS_GRID_ORDER.find(([s]) => s === slug) : null;
+    const title = titleRow ? titleRow[1] : 'Alert';
     items.push({
       id: `cry-${n.timestamp}`,
-      title: inferReasonFromMessage(n.message),
+      title,
       meta: `${formatEventTime(n.timestamp)} · ${String(n.message || '').slice(0, 72)}`,
       kind: 'cry',
       timestamp: n.timestamp,
@@ -694,8 +763,9 @@ export function buildActivityTimelineItems(sensors, notifications) {
   return items.slice(0, 12);
 }
 
-export function computeAnalyticsSummary(events, sensors) {
-  const hist = reasonHistogram(events);
+export function computeAnalyticsSummary(events, sensors, notifications) {
+  const hist =
+    notifications != null ? reasonHistogramFromCryLabels(notifications) : reasonHistogram(events);
   const top = hist[0]?.reason || '—';
   const topCount = hist[0]?.count ?? 0;
   const totalLabeled = hist.reduce((s, h) => s + h.count, 0) || 1;
