@@ -7,6 +7,11 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+USER_DOC_DEFAULT_PROJECTION = {
+    "photos.parent.data": 0,
+    "photos.baby.data": 0,
+}
+
 
 class Database:
     """
@@ -151,7 +156,7 @@ class Database:
         key = self.normalize_email(email)
         if not key:
             return None
-        doc = await self.db.users.find_one({"email": key})
+        doc = await self.db.users.find_one({"email": key}, USER_DOC_DEFAULT_PROJECTION)
         if doc:
             doc["_id"] = str(doc["_id"])
         return doc
@@ -160,7 +165,7 @@ class Database:
         key = self.normalize_phone(phone)
         if not key:
             return None
-        doc = await self.db.users.find_one({"phone": key})
+        doc = await self.db.users.find_one({"phone": key}, USER_DOC_DEFAULT_PROJECTION)
         if doc:
             doc["_id"] = str(doc["_id"])
         return doc
@@ -182,7 +187,7 @@ class Database:
             oid = ObjectId(user_id)
         except Exception:
             return None
-        doc = await self.db.users.find_one({"_id": oid})
+        doc = await self.db.users.find_one({"_id": oid}, USER_DOC_DEFAULT_PROJECTION)
         if doc:
             doc["_id"] = str(doc["_id"])
         return doc
@@ -269,6 +274,37 @@ class Database:
             .limit(limit)
         )
         return await cursor.to_list(length=limit)
+
+    async def set_user_photo(self, user_id: str, role: str, photo_doc: dict) -> bool:
+        from bson import ObjectId
+
+        try:
+            oid = ObjectId(user_id)
+        except Exception:
+            return False
+        if not role or not photo_doc:
+            return False
+        field = f"photos.{role}"
+        r = await self.db.users.update_one({"_id": oid}, {"$set": {field: photo_doc}})
+        return r.matched_count > 0
+
+    async def get_user_photo(self, user_id: str, role: str) -> tuple[bool, dict | str | None]:
+        """
+        Return (user_exists, photo_value_for_role).
+        photo_value_for_role can be dict (db-backed photo object), str (legacy URL), or None.
+        """
+        from bson import ObjectId
+
+        try:
+            oid = ObjectId(user_id)
+        except Exception:
+            return False, None
+        projection = {f"photos.{role}": 1}
+        doc = await self.db.users.find_one({"_id": oid}, projection)
+        if not doc:
+            return False, None
+        photos = doc.get("photos") or {}
+        return True, photos.get(role)
 
 
 # Singleton
