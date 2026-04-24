@@ -216,6 +216,14 @@ class StateManager:
             except Exception as e:
                 logger.error(f"Failed to save notification to MongoDB: {e}")
 
+            from services.cry_alert_sms import schedule_cry_escalation
+
+            schedule_cry_escalation(
+                self.active_user_id,
+                str(notification.get("message") or "Baby is crying!"),
+                cry_label=str(cry_label) if cry_label else None,
+            )
+
             await self._broadcast({
                 "type": "cry_alert",
                 "data": result,

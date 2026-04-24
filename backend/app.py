@@ -16,6 +16,7 @@ from routes import ws_routes
 from routes import audio_stream_routes
 from routes import care_log_routes
 from routes import uploads_routes
+from routes import sms_routes
 from services.database import database
 
 # Configure logging
@@ -53,6 +54,7 @@ app.include_router(uploads_routes.router)
 app.include_router(ws_routes.router)
 app.include_router(audio_stream_routes.router)
 app.include_router(care_log_routes.router)
+app.include_router(sms_routes.router)
 
 # Serve Vite build so client-side routes 
 if FRONTEND_DIST.is_dir() and (FRONTEND_DIST / "index.html").is_file():

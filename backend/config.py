@@ -49,6 +49,17 @@ class Settings:
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
     GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000")
 
+    # Keen Systems SMS (https://keensystems.com.lk/smsAPI) — cry alerts to parents / guardians
+    KEEN_SMS_API_URL: str = os.getenv("KEEN_SMS_API_URL", "https://keensystems.com.lk/smsAPI").strip()
+    KEEN_SMS_API_KEY: str = os.getenv("KEEN_SMS_API_KEY", "").strip()
+    KEEN_SMS_API_TOKEN: str = os.getenv("KEEN_SMS_API_TOKEN", "").strip()
+    KEEN_SMS_SENDER_ID: str = os.getenv("KEEN_SMS_SENDER_ID", "").strip()
+    # Minimum seconds between cry-alert SMS bursts per user (avoids flooding on repeated detections).
+    CRY_ALERT_SMS_COOLDOWN_SECONDS: int = int(os.getenv("CRY_ALERT_SMS_COOLDOWN_SECONDS", "300"))
+    # Auto-escalation: SMS to Guardian 1 / Guardian 2 after delays if alert not acknowledged.
+    CRY_ESCALATE_GUARDIAN1_DELAY_SEC: int = int(os.getenv("CRY_ESCALATE_GUARDIAN1_DELAY_SEC", "30"))
+    CRY_ESCALATE_GUARDIAN2_DELAY_SEC: int = int(os.getenv("CRY_ESCALATE_GUARDIAN2_DELAY_SEC", "120"))
+
     # SMTP Email
     SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
