@@ -10,6 +10,7 @@ import logging
 from config import settings
 from routes import audio_routes
 from routes import auth_routes
+from routes import chat_routes
 from routes import sensor_routes
 from routes import ws_routes
 from routes import audio_stream_routes
@@ -46,6 +47,7 @@ app.add_middleware(
 # Include routes
 app.include_router(auth_routes.router)
 app.include_router(audio_routes.router)
+app.include_router(chat_routes.router)
 app.include_router(sensor_routes.router)
 app.include_router(uploads_routes.router)
 app.include_router(ws_routes.router)

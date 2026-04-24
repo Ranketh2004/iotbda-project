@@ -3,13 +3,13 @@ import { MessageCircle, X } from 'lucide-react';
 import ExploratoryChatPanel from './ExploratoryChatPanel';
 
 const DEFAULT_SUGGESTIONS = [
-  "What's average humidity?",
-  'How many cries in the last 24h?',
-  'What should I do next?',
-  'Top cry reasons?',
+  "What's the current humidity?",
+  'How many cry alerts today?',
+  'Is the room temperature safe?',
+  'Summarise the last 24 hours',
 ];
 
-export default function NurseryCoachFab({ agentContext, title = 'Nursery coach', suggestions }) {
+export default function NurseryCoachFab({ title = 'Nursery coach', suggestions }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -73,7 +73,6 @@ export default function NurseryCoachFab({ agentContext, title = 'Nursery coach',
             </div>
             <div className="coach-fab-drawer-body">
               <ExploratoryChatPanel
-                agentContext={agentContext}
                 title={title}
                 suggestions={suggestions ?? DEFAULT_SUGGESTIONS}
                 hideHead
