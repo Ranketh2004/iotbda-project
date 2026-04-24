@@ -312,6 +312,8 @@ export default function AnalyticsPage() {
         open={detailEvent != null}
         onClose={() => setDetailEvent(null)}
         onAcknowledge={() => navigate('/dashboard/alert-escalation')}
+        liveCry={false}
+        allowManualSms={false}
         reason={detailEvent?.reason}
         confidence={detailEvent?.confidence}
         temperature={detailEvent?.temp}

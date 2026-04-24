@@ -11,7 +11,6 @@ import ListenButton from '../components/ListenButton';
 import ActivityTimeline from '../components/ActivityTimeline';
 import CriticalAlerts from '../components/CriticalAlerts';
 import DashboardFooter from '../components/DashboardFooter';
-import CryAlertPopup from '../components/CryAlertPopup';
 import CryAlertDetailModal from '../components/CryAlertDetailModal';
 import NurseryCoachFab from '../components/NurseryCoachFab';
 import { BABY_AGE_LABELS } from '../constants/userProfile';
@@ -168,6 +167,7 @@ export default function DashboardHome() {
     };
 
     setActiveAlert(notif);
+    setDetailModalOpen(true);
 
     if (Notification.permission === 'granted') {
       new Notification('🚨 CryGuard Alert', {
@@ -255,22 +255,30 @@ export default function DashboardHome() {
 
       <DashboardFooter />
 
-      <CryAlertPopup alert={activeAlert} onDismiss={() => setActiveAlert(null)} />
-
       <NurseryCoachFab agentContext={agentContext} title="Cry Guard Assistant" />
 
       <CryAlertDetailModal
-        open={detailModalOpen}
-        onClose={() => setDetailModalOpen(false)}
+        open={detailModalOpen || !!activeAlert}
+        onClose={() => {
+          setDetailModalOpen(false);
+          setActiveAlert(null);
+        }}
         onAcknowledge={() => navigate('/dashboard/alert-escalation')}
+        liveCry={!!activeAlert}
+        allowManualSms={!!activeAlert && !!localStorage.getItem('cryguard_token')}
+        sessionUser={sessionUser}
+        activeAlertMessage={activeAlert?.message || cryStatus?.message || ''}
+        cryLabel={cryStatus?.cry_label || activeAlert?.cry_label || ''}
         reason={
-          cryStatus?.cry_detected &&
+          (cryStatus?.cry_label && String(cryStatus.cry_label).trim()) ||
+          (cryStatus?.cry_detected &&
           cryStatus?.message &&
           !String(cryStatus.message).toLowerCase().includes('waiting')
             ? String(cryStatus.message).split('.')[0].trim().slice(0, 48)
-            : 'Hungry'
+            : '') ||
+          'Hungry'
         }
-        confidence={85}
+        cryMaxProb={typeof cryStatus?.max_prob === 'number' ? cryStatus.max_prob : undefined}
         temperature={
           sensorData?.temperature != null ? `${Number(sensorData.temperature).toFixed(0)}°C` : undefined
         }

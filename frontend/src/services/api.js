@@ -112,6 +112,53 @@ export async function sendChatMessage(message, history = []) {
   return res.json();
 }
 
+/** Live cry SMS escalation state (contacts row + event log). */
+export async function fetchEscalationStatus() {
+  const res = await fetch(`${API_BASE}/api/sms/escalation-status`, {
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Escalation status failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Stop pending timed guardian SMS for the current cry escalation (authenticated). */
+export async function acknowledgeCryAlert() {
+  const res = await fetch(`${API_BASE}/api/sms/cry-alert/ack`, {
+    method: 'POST',
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Ack failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Manual escalation SMS to Parent 2 or a guardian (during live cry alert).
+ * @param {'parent2'|'guardian1'|'guardian2'} target
+ * @param {{ message?: string, cry_label?: string }} [opts]
+ */
+export async function sendCryEscalationSms(target, opts = {}) {
+  const res = await fetch(`${API_BASE}/api/sms/cry-alert/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({
+      target,
+      message: opts.message ?? null,
+      cry_label: opts.cry_label ?? null,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || data.message || `SMS failed: ${res.status}`);
+  }
+  return data;
+}
+
 export async function submitCareLog(payload) {
   const endpoints = ['/api/care-logs/submit', '/api/care-logs/submit/', '/api/care-logs', '/api/care-logs/'];
   let lastError = null;
