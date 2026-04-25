@@ -157,7 +157,7 @@ export default function ListenButton({ onCryAlert }) {
           </span>
           <span className="listen-btn-sub">
             {listening
-              ? (espStreaming ? 'Real-time audio playing — Click to stop' : 'WebSocket connected, waiting for mic data')
+              ? (espStreaming ? 'Real-time audio playing, Click to stop' : 'WebSocket connected, waiting for mic data')
               : 'Stream real-time audio from ESP32 INMP441 mic'}
           </span>
         </div>

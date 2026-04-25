@@ -3,7 +3,9 @@ import { BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function StoryNarrativeBlock({ chapters, title = "Today's data story" }) {
   const [open, setOpen] = useState(0);
-  const list = chapters?.length ? chapters : [{ title: 'No chapters yet', body: 'Load sensor history to unlock narrative beats.' }];
+  const list = chapters?.length
+    ? chapters
+    : [{ title: 'Not enough data yet', body: 'Once the nursery sensor has more history, a short story will appear here.' }];
 
   return (
     <section className="story-block" aria-label="Data story">
@@ -11,7 +13,7 @@ export default function StoryNarrativeBlock({ chapters, title = "Today's data st
         <BookOpen size={20} className="story-block-ico" aria-hidden />
         <div>
           <h3 className="story-block-title">{title}</h3>
-          <p className="story-block-sub">Storytelling layer — scan, then drill into Analytics</p>
+          <p className="story-block-sub">Skim the chapters here, then open Insights for charts and patterns</p>
         </div>
       </div>
       <ol className="story-chapter-list">

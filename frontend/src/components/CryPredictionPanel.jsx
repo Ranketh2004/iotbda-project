@@ -9,7 +9,7 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
-/** Top three buckets by count — same totals as the grid (Mongo cry_label only). */
+/** Top three buckets by count, same totals as the grid (Mongo cry_label only). */
 function topBarRowsFromHistogram(hist) {
   const total = hist.reduce((s, h) => s + h.count, 0);
   if (!total) return null;
@@ -49,10 +49,7 @@ export default function CryPredictionPanel({ notifications }) {
   return (
     <section className="dash-cry-card">
       <h3 className="dash-cry-title">Cry reason lens</h3>
-      <p className="dash-cry-sub">
-        Share of loaded notifications that have a multiclass cry_label in MongoDB (last fetch window). Cohort CSV rows
-        are not mixed into this chart.
-      </p>
+      
       {main && (
         <ul className="dash-cry-rows">
           {main.map((row) => (

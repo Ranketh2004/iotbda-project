@@ -1,12 +1,9 @@
 import React from 'react';
-import { Camera, BellOff, History } from 'lucide-react';
 import { DEFAULT_BABY_PLACEHOLDER_SRC } from '../constants/assets';
 
 export default function DeviceHeroCard({
   espConnected,
-  sensorData,
   cryStatus,
-  onDetailsClick,
   babyName,
   babyAgeLabel,
   babyPhotoUrl,
@@ -43,24 +40,6 @@ export default function DeviceHeroCard({
           </span>
           <p className="dash-baby-sub">{subLine}</p>
         </div>
-      </div>
-      <div className="dash-hero-actions">
-        <button
-          type="button"
-          className="dash-action-btn dash-action-details"
-          onClick={() => onDetailsClick?.()}
-        >
-          <Camera size={18} />
-          Details
-        </button>
-        <button type="button" className="dash-action-btn dash-action-alarm">
-          <BellOff size={18} />
-          Stop Alarm
-        </button>
-        <button type="button" className="dash-action-btn dash-action-history">
-          <History size={18} />
-          History
-        </button>
       </div>
     </section>
   );

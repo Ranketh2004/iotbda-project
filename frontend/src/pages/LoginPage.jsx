@@ -215,7 +215,13 @@ export default function LoginPage() {
               <GoogleIcon />
               Google
             </button>
-            <button type="button" className="login-social-btn" aria-label="Continue with Apple">
+            <button
+              type="button"
+              className="login-social-btn login-social-btn--disabled"
+              aria-label="Continue with Apple (coming soon)"
+              disabled
+              title="Coming soon"
+            >
               <AppleIcon />
               Apple
             </button>

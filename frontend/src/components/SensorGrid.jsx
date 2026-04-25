@@ -31,8 +31,8 @@ export default function SensorGrid({ sensorData }) {
   const motion = sensorData?.motion;
   const dark = sensorData?.light_dark;
 
-  const tempStr = temp !== null && temp !== undefined ? `${temp.toFixed(1)}°C` : '—';
-  const humStr = hum !== null && hum !== undefined ? `${hum.toFixed(0)}%` : '—';
+  const tempStr = temp !== null && temp !== undefined ? `${temp.toFixed(1)}°C` : '-';
+  const humStr = hum !== null && hum !== undefined ? `${hum.toFixed(0)}%` : '-';
 
   return (
     <div className="dash-sensor-grid">
@@ -72,7 +72,7 @@ export default function SensorGrid({ sensorData }) {
         <div className="dash-sensor-value-row">
           <span className="dash-sensor-value">{dark ? 'Dark' : 'Bright'}</span>
           <span className={`dash-sensor-delta ${dark ? 'warn' : 'neutral'}`}>
-            {dark ? '+5%' : '—'}
+            {dark ? '+5%' : '-'}
           </span>
         </div>
         <div className="dash-sensor-bar">

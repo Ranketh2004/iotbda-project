@@ -1,4 +1,4 @@
-# CryGuard Nursery Coach — Agent Architecture
+# CryGuard Nursery Coach, Agent Architecture
 
 ## Overview
 
@@ -83,9 +83,9 @@ The `/api/chat` endpoint accepts an optional JWT Bearer token (same as all other
 | Data source | Collection | Fields used |
 |---|---|---|
 | Live sensor | `sensor_data` | temperature, humidity, motion, light_dark, timestamp |
-| Sensor history | `sensor_data` | last 100 rows — used for avg/min/max stats |
-| Cry alerts | `notifications` | timestamp, message, type — last 30 |
-| Parent care logs | `parent_care_logs` | entry_date, cry_frequency, cry_intensity_avg, feeding_type, feeding_frequency, water_intake, estimated_nutrition_level, time_of_day_peak_cry, motion_activity_level — last 14 days |
+| Sensor history | `sensor_data` | last 100 rows, used for avg/min/max stats |
+| Cry alerts | `notifications` | timestamp, message, type, last 30 |
+| Parent care logs | `parent_care_logs` | entry_date, cry_frequency, cry_intensity_avg, feeding_type, feeding_frequency, water_intake, estimated_nutrition_level, time_of_day_peak_cry, motion_activity_level, last 14 days |
 | ESP32 status | `esp_status` | last_seen (used to show connected/disconnected) |
 
 ---
@@ -109,9 +109,9 @@ frontend/src/
 
 ## Extending the Agent
 
-**Add more data sources**: Edit `chat_service.py` — fetch additional MongoDB collections and append them to the system prompt string in `_build_system_prompt()`.
+**Add more data sources**: Edit `chat_service.py`, fetch additional MongoDB collections and append them to the system prompt string in `_build_system_prompt()`.
 
-**Switch models**: Change `OPENROUTER_MODEL` in `.env` — any OpenAI-compatible model on OpenRouter works without code changes.
+**Switch models**: Change `OPENROUTER_MODEL` in `.env`, any OpenAI-compatible model on OpenRouter works without code changes.
 
 **Add streaming**: Replace the `httpx` POST in `chat_service.py` with a streaming request and return a `StreamingResponse` from the FastAPI route. Update the frontend to consume `text/event-stream`.
 

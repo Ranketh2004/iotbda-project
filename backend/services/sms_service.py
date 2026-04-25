@@ -1,6 +1,6 @@
 """
 Keen Systems SMS gateway (https://keensystems.com.lk/smsAPI).
-Credentials and sender ID must be set via environment variables — never commit secrets.
+Credentials and sender ID must be set via environment variables, never commit secrets.
 """
 
 from __future__ import annotations

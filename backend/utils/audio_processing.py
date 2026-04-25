@@ -25,7 +25,7 @@ def preprocess_audio(audio_bytes: bytes):
         # Load with target sample rate, mono
         y, sr = librosa.load(audio_file, sr=settings.SAMPLE_RATE, mono=True)
 
-        # RMS on float waveform — silence is near 0; gating avoids bogus CNN input after normalization
+        # RMS on float waveform, silence is near 0; gating avoids bogus CNN input after normalization
         rms_energy = float(np.sqrt(np.mean(np.square(y.astype(np.float64)))))
 
         mfcc = librosa.feature.mfcc(y=y, 

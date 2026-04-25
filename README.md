@@ -235,14 +235,14 @@ Open your browser and navigate to **http://localhost:3000** to see the dashboard
 
 Open **two terminals**:
 
-**Terminal 1 — Backend:**
+**Terminal 1, Backend:**
 ```bash
 cd backend
 .\venv\Scripts\Activate.ps1   # Windows
 python app.py
 ```
 
-**Terminal 2 — Frontend:**
+**Terminal 2, Frontend:**
 ```bash
 cd frontend
 npm run dev
@@ -321,7 +321,7 @@ Open **Sketch** → **Include Library** → **Manage Libraries** and install:
 | Adafruit Unified Sensor | Adafruit       | Sensor abstraction layer         |
 | WebSockets          | Markus Sattler     | WebSocket client for audio stream|
 
-> **Note:** The I2S driver (`driver/i2s.h`) and WiFi/HTTPClient libraries are included with the ESP32 board package — no separate install needed.
+> **Note:** The I2S driver (`driver/i2s.h`) and WiFi/HTTPClient libraries are included with the ESP32 board package, no separate install needed.
 
 #### 3. Configure & Upload
 

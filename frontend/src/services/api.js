@@ -58,7 +58,7 @@ function authHeaders() {
   return { Authorization: `Bearer ${token}` };
 }
 
-/** Evening care log — requires auth; `tz` is IANA timezone (e.g. from Intl). */
+/** Evening care log, requires auth; `tz` is IANA timezone (e.g. from Intl). */
 export async function fetchCareLogWindow(tz) {
   const q = new URLSearchParams({ tz: tz || 'UTC' }).toString();
   const res = await fetch(`${API_BASE}/api/care-logs/window?${q}`, {

@@ -131,9 +131,9 @@ class StateManager:
 
         if merged["cry_detected"]:
             if pir_confirmed:
-                merged["message"] = "Baby is crying — audio and motion confirmed."
+                merged["message"] = "Baby is crying, audio and motion confirmed."
             else:
-                merged["message"] = "Baby is crying — high-confidence audio detected."
+                merged["message"] = "Baby is crying, high-confidence audio detected."
         elif mic_cry:
             if settings.ALLOW_MIC_ONLY_CRY_ALERT:
                 merged["message"] = (
@@ -141,7 +141,7 @@ class StateManager:
                 )
             else:
                 merged["message"] = (
-                    "Cry-like audio; PIR shows no motion — combined alert not sent."
+                    "Cry-like audio; PIR shows no motion, combined alert not sent."
                 )
         else:
             merged.setdefault("message", "No cry detected")

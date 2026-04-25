@@ -40,7 +40,7 @@ async def escalation_status(authorization: str | None = Header(None)):
 
 @router.post("/cry-alert/ack", response_model=CryAlertAckResponse)
 async def cry_alert_ack(authorization: str | None = Header(None)):
-    """Acknowledge the active cry alert — cancels pending timed guardian SMS."""
+    """Acknowledge the active cry alert, cancels pending timed guardian SMS."""
     uid = _decode_bearer_user_id(authorization)
     acknowledge_cry_escalation(uid)
     return CryAlertAckResponse()

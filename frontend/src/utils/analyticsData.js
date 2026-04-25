@@ -181,7 +181,7 @@ export function getCsvSensorHistory() {
 
 function cryMessageFromRow(row, idx, total) {
   const parts = [
-    `Cohort log ${row.baby_id || 'baby'} — cry ${idx + 1}/${total} on ${row.date || '?'}.`,
+    `Cohort log ${row.baby_id || 'baby'} - cry ${idx + 1}/${total} on ${row.date || '?'}.`,
     `Intensity ${row.cry_intensity_avg || 'n/a'}, feeding: ${row.feeding_type || 'n/a'} (${row.main_food_types || 'n/a'}).`,
     `Nutrition signal: ${row.estimated_nutrition_level || 'n/a'}; peak fuss: ${row.time_of_day_peak_cry || 'n/a'}.`,
   ];
@@ -300,7 +300,7 @@ export function mergeNotifications(mongoList, csvList) {
   for (const n of [...m, ...s]) {
     const ts = Number(n.timestamp);
     if (!Number.isFinite(ts)) continue;
-    // Mongo docs must dedupe by _id only — old key used ts.toFixed(0)+message and dropped distinct
+    // Mongo docs must dedupe by _id only; the old key used ts.toFixed(0)+message and dropped distinct
     // alerts in the same second with the same template (e.g. multiple cry_label values).
     const id = n._id != null && n._id !== '' ? String(n._id) : '';
     const key = id
@@ -479,9 +479,9 @@ export function enrichNotificationAsEvent(n, sensors) {
   const confidenceVariant =
     confidence >= 85 ? 'green' : confidence >= 75 ? 'yellow' : 'grey';
   const tempStr =
-    sn?.temperature != null ? `${Number(sn.temperature).toFixed(0)}°C` : '—';
-  const humStr = sn?.humidity != null ? `${Number(sn.humidity).toFixed(0)}%` : '—';
-  const lightLabel = sn ? (sn.light_dark ? 'Dark' : 'Bright') : '—';
+    sn?.temperature != null ? `${Number(sn.temperature).toFixed(0)}°C` : '-';
+  const humStr = sn?.humidity != null ? `${Number(sn.humidity).toFixed(0)}%` : '-';
+  const lightLabel = sn ? (sn.light_dark ? 'Dark' : 'Bright') : '-';
   const lightIcon = sn?.light_dark ? 'moon' : 'sun';
   return {
     id: `n-${ts}`,
@@ -522,8 +522,8 @@ export function mergeCryEvents(csvStructuredEvents, notifications, sensors) {
       timestamp: ts,
       icon: e.reason === 'tired' ? 'moon' : e.reason === 'discomfort' ? 'circle' : 'frown',
       iconTone,
-      temp: sn?.temperature != null ? `${Number(sn.temperature).toFixed(0)}°C` : '—',
-      humidity: sn?.humidity != null ? `${Number(sn.humidity).toFixed(0)}%` : '—',
+      temp: sn?.temperature != null ? `${Number(sn.temperature).toFixed(0)}°C` : '-',
+      humidity: sn?.humidity != null ? `${Number(sn.humidity).toFixed(0)}%` : '-',
       light: e.lightLabel ?? (sn?.light_dark ? 'Dark' : 'Bright'),
       lightIcon: e.lightIcon || (sn?.light_dark ? 'moon' : 'sun'),
       footerLeft: e.footerLeft,
@@ -582,6 +582,210 @@ export function avgTemp(sensors) {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
+function meanArr(xs) {
+  if (!xs.length) return 0;
+  return xs.reduce((a, b) => a + b, 0) / xs.length;
+}
+
+function pearsonCorrelation(xs, ys) {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 3) return null;
+  const sliceX = xs.slice(0, n);
+  const sliceY = ys.slice(0, n);
+  const mx = meanArr(sliceX);
+  const my = meanArr(sliceY);
+  let num = 0;
+  let dx = 0;
+  let dy = 0;
+  for (let i = 0; i < n; i++) {
+    const vx = sliceX[i] - mx;
+    const vy = sliceY[i] - my;
+    num += vx * vy;
+    dx += vx * vx;
+    dy += vy * vy;
+  }
+  const den = Math.sqrt(dx * dy);
+  if (den < 1e-12) return 0;
+  return num / den;
+}
+
+function standardizeArr(xs) {
+  const m = meanArr(xs);
+  const denom = Math.max(xs.length - 1, 1);
+  const dev = Math.sqrt(xs.reduce((s, x) => s + (x - m) ** 2, 0) / denom);
+  const s = dev < 1e-9 ? 1 : dev;
+  return xs.map((x) => (x - m) / s);
+}
+
+/** Gauss–Jordan; A is n×n (modified in place); returns x or null if singular. */
+function solveLinearSystem(A, b) {
+  const n = A.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let piv = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+    }
+    if (Math.abs(M[piv][col]) < 1e-12) return null;
+    [M[col], M[piv]] = [M[piv], M[col]];
+    const div = M[col][col];
+    for (let k = col; k <= n; k++) M[col][k] /= div;
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = M[r][col];
+      if (Math.abs(f) < 1e-15) continue;
+      for (let k = col; k <= n; k++) M[r][k] -= f * M[col][k];
+    }
+  }
+  return M.map((row) => row[n]);
+}
+
+/**
+ * Pearson correlations between temp, humidity, motion, and light (dark=1),
+ * plus a small ridge regression (humidity ~ standardized temp, motion, light) as a linear proxy for “feature importance”.
+ */
+export function computeSensorCorrelationAnalysis(sensors, opts = {}) {
+  const ridgeLambda = opts.ridgeLambda ?? 0.12;
+  const minSamples = opts.minSamples ?? 8;
+  const rows = [];
+  for (const s of sensors || []) {
+    const t = Number(s.temperature);
+    const h = Number(s.humidity);
+    if (!Number.isFinite(t) || !Number.isFinite(h)) continue;
+    const m = s.motion ? 1 : 0;
+    const l = s.light_dark ? 1 : 0;
+    rows.push({ t, h, m, l });
+  }
+  const n = rows.length;
+  if (n < minSamples) {
+    return {
+      ok: false,
+      n,
+      minSamples,
+      message: `We need at least ${minSamples} room readings that include both temperature and humidity. Open the dashboard with the sensor running for a bit, then check back.`,
+    };
+  }
+
+  const ts = rows.map((r) => r.t);
+  const hs = rows.map((r) => r.h);
+  const ms = rows.map((r) => r.m);
+  const ls = rows.map((r) => r.l);
+
+  const shortLabels = ['Temperature', 'Humidity', 'Movement', 'Dark room'];
+  const vecs = [ts, hs, ms, ls];
+  const dim = shortLabels.length;
+
+  const matrix = [];
+  for (let i = 0; i < dim; i++) {
+    const row = [];
+    for (let j = 0; j < dim; j++) {
+      if (i === j) {
+        row.push(1);
+        continue;
+      }
+      const r = pearsonCorrelation(vecs[i], vecs[j]);
+      row.push(r == null ? null : Math.round(r * 1000) / 1000);
+    }
+    matrix.push(row);
+  }
+
+  const pairs = [];
+  for (let i = 0; i < dim; i++) {
+    for (let j = i + 1; j < dim; j++) {
+      const r = pearsonCorrelation(vecs[i], vecs[j]);
+      pairs.push({
+        a: shortLabels[i],
+        b: shortLabels[j],
+        r: r == null ? null : Math.round(r * 1000) / 1000,
+      });
+    }
+  }
+  pairs.sort((a, b) => {
+    const av = a.r == null ? 0 : Math.abs(a.r);
+    const bv = b.r == null ? 0 : Math.abs(b.r);
+    return bv - av;
+  });
+
+  const tZ = standardizeArr(ts);
+  const mZ = standardizeArr(ms);
+  const lZ = standardizeArr(ls);
+  const hRaw = [...hs];
+  const p = 4;
+  const XtX = Array(p)
+    .fill(0)
+    .map(() => Array(p).fill(0));
+  const Xty = Array(p).fill(0);
+  for (let i = 0; i < n; i++) {
+    const xi = [1, tZ[i], mZ[i], lZ[i]];
+    const yi = hRaw[i];
+    for (let a = 0; a < p; a++) {
+      Xty[a] += xi[a] * yi;
+      for (let b = 0; b < p; b++) XtX[a][b] += xi[a] * xi[b];
+    }
+  }
+  const A = XtX.map((r) => [...r]);
+  for (let d = 1; d < p; d++) A[d][d] += ridgeLambda;
+
+  const beta = solveLinearSystem(A, [...Xty]);
+  if (!beta) {
+    return {
+      ok: false,
+      n,
+      message: 'Not enough variety in the readings to compare factors yet. Try again after more sensor history.',
+      matrix,
+      pairs,
+      shortLabels,
+    };
+  }
+
+  const betaNames = ['Baseline', 'Temperature', 'Movement', 'Dark room'];
+  const betas = betaNames.map((name, i) => ({
+    name,
+    value: Math.round(beta[i] * 1000) / 1000,
+  }));
+
+  const absSlopes = [
+    { feature: 'Temperature', signed: beta[1], absBeta: Math.abs(beta[1]) },
+    { feature: 'Motion', signed: beta[2], absBeta: Math.abs(beta[2]) },
+    { feature: 'Dark room', signed: beta[3], absBeta: Math.abs(beta[3]) },
+  ];
+  const sumAbs = absSlopes.reduce((s, x) => s + x.absBeta, 0) || 1;
+  const importance = absSlopes
+    .map((x) => ({
+      feature: x.feature,
+      signed: Math.round(x.signed * 1000) / 1000,
+      absBeta: Math.round(x.absBeta * 1000) / 1000,
+      pct: Math.round((x.absBeta / sumAbs) * 1000) / 10,
+    }))
+    .sort((a, b) => b.absBeta - a.absBeta);
+
+  const sortedT = [...ts].sort((a, b) => a - b);
+  const medT = sortedT[Math.floor(sortedT.length / 2)];
+  const below = rows.filter((r) => r.t < medT);
+  const above = rows.filter((r) => r.t >= medT);
+  const meanHBelow = meanArr(below.map((r) => r.h));
+  const meanHAbove = meanArr(above.map((r) => r.h));
+
+  return {
+    ok: true,
+    n,
+    ridgeLambda,
+    shortLabels,
+    matrix,
+    pairs,
+    betas,
+    importance,
+    stratified: {
+      threshold: Math.round(medT * 100) / 100,
+      meanHumidityBelow: Math.round(meanHBelow * 10) / 10,
+      meanHumidityAbove: Math.round(meanHAbove * 10) / 10,
+      delta: Math.round((meanHAbove - meanHBelow) * 10) / 10,
+      nBelow: below.length,
+      nAbove: above.length,
+    },
+  };
+}
+
 export function buildStoryChapters({ sensors, events, liveTemp, liveHum, cryStatus }) {
   const chapters = [];
   const last24 = (sensors || []).filter((s) => s.timestamp >= nowSec() - 86400);
@@ -608,7 +812,7 @@ export function buildStoryChapters({ sensors, events, liveTemp, liveHum, cryStat
       title: 'Environment beat',
       body: `Average humidity is around ${hum.toFixed(
         0,
-      )}% — on the high side for Colombo-area nurseries. Ventilation or a compact dehumidifier during sleep blocks often reduces false “discomfort” spikes.`,
+      )}%, on the high side for Colombo-area nurseries. Ventilation or a compact dehumidifier during sleep blocks often reduces false “discomfort” spikes.`,
     });
   } else if (hum != null) {
     chapters.push({
@@ -679,7 +883,7 @@ export function exploratoryAgentReply(question, ctx) {
   const q = String(question || '').trim().toLowerCase();
   const { events, sensors, topReason, alerts24, avgHum, avgTmp } = ctx;
   if (!q) {
-    return 'Ask about humidity, temperature, cry counts, top reasons, or what to do next — I use merged MongoDB readings plus the infant cry & nutrition CSV on this device.';
+    return 'Ask about humidity, temperature, cry counts, top reasons, or what to do next. I use merged MongoDB readings plus the infant cry & nutrition CSV on this device.';
   }
   if (/help|^what can|suggest|recommend|should i/.test(q)) {
     return buildDecisionSupport({ sensors, events })
@@ -689,7 +893,7 @@ export function exploratoryAgentReply(question, ctx) {
   if (/humid/.test(q)) {
     return avgHum != null
       ? `Blended average humidity is about ${avgHum.toFixed(1)}% across the visible series. ${
-          avgHum > 70 ? 'That is elevated — prioritize airflow in the sleep block.' : 'That sits in a typical comfort band.'
+          avgHum > 70 ? 'That is elevated; prioritize airflow in the sleep block.' : 'That sits in a typical comfort band.'
         }`
       : 'No humidity samples in the merged window yet.';
   }
@@ -712,9 +916,9 @@ export function exploratoryAgentReply(question, ctx) {
     return `Severity split in the merged window: ${c} critical, ${m} mild. Open Analytics filters to isolate each band.`;
   }
   if (/mongo|database|live|real|csv|cohort/.test(q)) {
-    return 'Live rows from your CryGuard API (MongoDB) are merged with infant_cry_nutrition_data.csv — daily cry counts and feeding fields are expanded into alerts and aligned to the current week for charting.';
+    return 'Live rows from your CryGuard API (MongoDB) are merged with infant_cry_nutrition_data.csv. Daily cry counts and feeding fields are expanded into alerts and aligned to the current week for charting.';
   }
-  return `Try: “What’s average humidity?”, “How many cries last 24h?”, or “What should I do?” — Top reason right now: ${topReason || 'unknown'}.`;
+  return `Try: “What’s average humidity?”, “How many cries last 24h?”, or “What should I do?”. Top reason right now: ${topReason || 'unknown'}.`;
 }
 
 export function buildAgentContext(mergedSensors, mergedEvents, mergedNotifications) {
@@ -729,30 +933,57 @@ export function buildAgentContext(mergedSensors, mergedEvents, mergedNotificatio
   };
 }
 
+/**
+ * One-line detail for activity timeline (avoids repeating wall-clock + cohort diary date).
+ */
+export function formatCryTimelineDetail(message) {
+  const raw = String(message || '').trim();
+  if (!raw) return '';
+
+  const cohort = /^Cohort log\s+(\S+)\s*(?:-\s+|,\s*|\u2014\s*)cry\s+(\d+)\/(\d+)\s+on\s+([\d?-]+)\.\s*/i.exec(raw);
+  if (cohort) {
+    const babyId = cohort[1];
+    const cryIdx = cohort[2];
+    const cryTotal = cohort[3];
+    const diary = cohort[4];
+    let tail = raw.slice(cohort[0].length).trim();
+    tail = tail.split(/\.\s*Nutrition signal:/i)[0].trim();
+    tail = tail.replace(/^Intensity\s+/i, 'Intensity: ').replace(/\s+/g, ' ').trim();
+    const compact = `Cohort · ${babyId} · cry ${cryIdx}/${cryTotal} · diary ${diary}${tail ? ` · ${tail}` : ''}`;
+    return compact.length > 160 ? `${compact.slice(0, 157)}…` : compact;
+  }
+
+  const collapsed = raw.replace(/\s+/g, ' ').trim();
+  if (collapsed.length <= 110) return collapsed;
+  return `${collapsed.slice(0, 107)}…`;
+}
+
 /** Timeline rows: cries + motion transitions from sensor series */
 export function buildActivityTimelineItems(sensors, notifications) {
   const items = [];
   const sns = [...(sensors || [])].filter((s) => s.timestamp != null).sort((a, b) => b.timestamp - a.timestamp);
-  for (const n of notifications || []) {
+  (notifications || []).forEach((n, idx) => {
     const slug = normalizeCryLabel(n.cry_label ?? n.label) ?? inferReasonFromMessage(n.message);
     const titleRow = slug ? LENS_GRID_ORDER.find(([s]) => s === slug) : null;
     const title = titleRow ? titleRow[1] : 'Alert';
     items.push({
-      id: `cry-${n.timestamp}`,
+      id: `cry-${String(n.timestamp)}-${idx}`,
       title,
-      meta: `${formatEventTime(n.timestamp)} · ${String(n.message || '').slice(0, 72)}`,
+      timeLabel: formatEventTime(n.timestamp),
+      detail: formatCryTimelineDetail(n.message),
       kind: 'cry',
       timestamp: n.timestamp,
     });
-  }
+  });
   let prevMotion = null;
   for (const s of sns.slice(0, 24)) {
     if (prevMotion === null) prevMotion = s.motion;
     if (prevMotion !== s.motion) {
       items.push({
         id: `mot-${s.timestamp}`,
-        title: s.motion ? 'Motion picked up' : 'Settled — low motion',
-        meta: formatEventTime(s.timestamp),
+        title: s.motion ? 'Motion picked up' : 'Settled (low motion)',
+        timeLabel: formatEventTime(s.timestamp),
+        detail: '',
         kind: 'motion',
         timestamp: s.timestamp,
       });
@@ -766,7 +997,7 @@ export function buildActivityTimelineItems(sensors, notifications) {
 export function computeAnalyticsSummary(events, sensors, notifications) {
   const hist =
     notifications != null ? reasonHistogramFromCryLabels(notifications) : reasonHistogram(events);
-  const top = hist[0]?.reason || '—';
+  const top = hist[0]?.reason || '-';
   const topCount = hist[0]?.count ?? 0;
   const totalLabeled = hist.reduce((s, h) => s + h.count, 0) || 1;
   const topShare = Math.round((topCount / totalLabeled) * 100);
@@ -779,18 +1010,20 @@ export function computeAnalyticsSummary(events, sensors, notifications) {
   const avgHum = avgHumidity(sensors);
   return {
     topReason: top,
-    topTrend: `${topShare}% of labeled events in the merged window`,
+    topTrend: `Shows up in about ${topShare}% of labeled alerts in this view`,
     alertsToday: alerts24,
     alertsTrend: delta > 0 ? 'up' : delta < 0 ? 'down' : 'neutral',
     alertsTrendLabel:
       prev24 === 0 && alerts24 === 0
-        ? 'No prior-day slice to compare'
-        : `${Math.abs(delta)}% vs prior 24h`,
-    avgResponseLabel: avgHum != null && avgHum > 70 ? 'Ventilation priority' : 'Comfort band OK',
+        ? 'Nothing to compare to yesterday yet'
+        : delta === 0
+          ? 'About the same as the day before'
+          : `${Math.abs(delta)}% ${delta > 0 ? 'more' : 'fewer'} than the day before`,
+    avgResponseLabel: avgHum != null && avgHum > 70 ? 'Room may feel muggy' : 'Humidity looks typical',
     avgResponseDetail:
       avgHum != null
-        ? `Mean humidity ${avgHum.toFixed(0)}% across merged readings`
-        : 'Not enough humidity samples',
+        ? `Average humidity is about ${avgHum.toFixed(0)}% across recent readings`
+        : 'We need more humidity readings from the sensor',
   };
 }
 
@@ -808,4 +1041,97 @@ export function hourlyCryBuckets(events, hours = 48) {
     bins[idx].count += 1;
   }
   return bins;
+}
+
+/** Cohort nutrition CSV rows in the same window used for merged charts. */
+export function getCohortNutritionRowsForDashboard() {
+  return cohortRowsForAnalytics();
+}
+
+function nutritionWaterBucket(w) {
+  const s = String(w || '').toLowerCase();
+  if (s.includes('low')) return 'low';
+  if (s.includes('high')) return 'high';
+  if (s.includes('adequate')) return 'adequate';
+  return 'unknown';
+}
+
+function formatShortIsoDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '').trim());
+  if (!m) return String(iso || '');
+  try {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function dominantWaterKey(counts) {
+  const ranked = ['low', 'adequate', 'high', 'unknown'].map((k) => [k, counts[k] || 0]);
+  ranked.sort((a, b) => b[1] - a[1]);
+  return ranked[0][1] > 0 ? ranked[0][0] : 'unknown';
+}
+
+/**
+ * Aggregates infant_cry_nutrition_data.csv cohort rows for dashboard nutrition tiles
+ * (water intake by day, cry frequency trend, nutrition mix).
+ */
+export function buildNutritionDashboardSummaries() {
+  const rows = cohortRowsForAnalytics();
+  if (!rows.length) {
+    return {
+      ok: false,
+      message: 'No nutrition cohort rows in the current date window.',
+    };
+  }
+  const dates = [...new Set(rows.map((r) => r.date).filter(Boolean))].sort();
+  const latest = dates[dates.length - 1];
+  const rowsLatest = rows.filter((r) => r.date === latest);
+  const waterOnLatestDay = { low: 0, adequate: 0, high: 0, unknown: 0 };
+  for (const r of rowsLatest) {
+    const b = nutritionWaterBucket(r.water_intake);
+    waterOnLatestDay[b]++;
+  }
+  const last7 = dates.slice(-7);
+  const waterByDay = last7.map((d) => {
+    const dayRows = rows.filter((r) => r.date === d);
+    const o = { date: d, label: formatShortIsoDate(d), low: 0, adequate: 0, high: 0, unknown: 0 };
+    for (const r of dayRows) {
+      o[nutritionWaterBucket(r.water_intake)]++;
+    }
+    return o;
+  });
+  const last14 = dates.slice(-14);
+  const cryByDay = last14.map((d) => {
+    const dayRows = rows.filter((r) => r.date === d);
+    const sum = dayRows.reduce((a, r) => a + (parseInt(r.cry_frequency, 10) || 0), 0);
+    const avg = dayRows.length ? sum / dayRows.length : 0;
+    return { date: d, label: formatShortIsoDate(d), avgCry: Math.round(avg * 10) / 10, n: dayRows.length };
+  });
+  const nutritionMix = {};
+  for (const r of rows) {
+    const n = String(r.estimated_nutrition_level || 'unknown').trim().toLowerCase() || 'unknown';
+    nutritionMix[n] = (nutritionMix[n] || 0) + 1;
+  }
+  const uniqueBabies = new Set(rows.map((r) => r.baby_id).filter(Boolean)).size;
+  const dominantLatest = dominantWaterKey(waterOnLatestDay);
+  const maxCry = Math.max(...cryByDay.map((c) => c.avgCry), 1);
+  const maxWaterStack = Math.max(...waterByDay.map((d) => d.low + d.adequate + d.high + d.unknown), 1);
+  return {
+    ok: true,
+    rowCount: rows.length,
+    uniqueBabies,
+    latestDate: latest,
+    latestDateLabel: formatShortIsoDate(latest),
+    waterOnLatestDay,
+    dominantWaterLatest: dominantLatest,
+    waterByDay,
+    cryByDay,
+    maxCry,
+    maxWaterStack,
+    nutritionMix,
+  };
 }
