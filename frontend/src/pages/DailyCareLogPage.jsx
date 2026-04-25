@@ -361,7 +361,7 @@ export default function DailyCareLogPage() {
               )}
               {field(
                 'day_type',
-                'Day type (auto)',
+                'Day type',
                 <input id="day_type" className="care-log-input care-log-input--readonly" readOnly value={form.day_type} />,
               )}
               <div className="care-log-grid-span">
@@ -372,7 +372,7 @@ export default function DailyCareLogPage() {
               </div>
               {field(
                 'cry_frequency',
-                'Cry frequency (count for the day), from cry alerts (you can edit)',
+                'Cry frequency (count for the day), from cry alerts',
                 <input
                   id="cry_frequency"
                   className="care-log-input"
@@ -384,7 +384,7 @@ export default function DailyCareLogPage() {
               )}
               {field(
                 'time_of_day_peak_cry',
-                'Time of day, peak cry, from alert timestamps (you can edit)',
+                'Time of day, peak cry, from alert timestamps',
                 <select
                   id="time_of_day_peak_cry"
                   className="care-log-select"
@@ -401,7 +401,7 @@ export default function DailyCareLogPage() {
               )}
               {field(
                 'motion_activity_level',
-                'Motion / activity level, from motion sensor samples (you can edit)',
+                'Motion / activity level, from motion sensor samples',
                 <select
                   id="motion_activity_level"
                   className="care-log-select"
@@ -418,7 +418,7 @@ export default function DailyCareLogPage() {
               )}
               {field(
                 'cry_intensity_avg',
-                'Average cry intensity, from alert wording (you can edit)',
+                'Average cry intensity, from alert wording',
                 <select
                   id="cry_intensity_avg"
                   className="care-log-select"
@@ -442,7 +442,7 @@ export default function DailyCareLogPage() {
               </div>
               {field(
                 'age_days',
-                'Age (days), parent / caregiver',
+                'Age (days)',
                 <input
                   id="age_days"
                   className="care-log-input"
@@ -454,7 +454,7 @@ export default function DailyCareLogPage() {
               )}
               {field(
                 'feeding_type',
-                'Feeding type, parent / caregiver',
+                'Feeding type',
                 <select
                   id="feeding_type"
                   className="care-log-select"
@@ -471,7 +471,7 @@ export default function DailyCareLogPage() {
               )}
               {field(
                 'main_food_types',
-                'Main food types, parent / caregiver',
+                'Main food types',
                 <input
                   id="main_food_types"
                   className="care-log-input"
@@ -483,7 +483,7 @@ export default function DailyCareLogPage() {
               )}
               {field(
                 'feeding_frequency',
-                'Feeding frequency, parent / caregiver',
+                'Feeding frequency',
                 <select
                   id="feeding_frequency"
                   className="care-log-select"
@@ -500,7 +500,7 @@ export default function DailyCareLogPage() {
               )}
               {field(
                 'water_intake',
-                'Water intake, parent / caregiver',
+                'Water intake',
                 <select
                   id="water_intake"
                   className="care-log-select"
@@ -517,7 +517,7 @@ export default function DailyCareLogPage() {
               )}
               {field(
                 'meal_timing_pattern',
-                'Meal timing pattern, parent / caregiver',
+                'Meal timing pattern',
                 <select
                   id="meal_timing_pattern"
                   className="care-log-select"
@@ -534,7 +534,7 @@ export default function DailyCareLogPage() {
               )}
               {field(
                 'estimated_nutrition_level',
-                'Estimated nutrition level, auto from infant_cry_nutrition_data.csv (override if you prefer)',
+                'Estimated nutrition level',
                 <select
                   id="estimated_nutrition_level"
                   className="care-log-select"

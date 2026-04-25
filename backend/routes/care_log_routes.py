@@ -157,7 +157,7 @@ async def care_log_suggestions(
     Autofill hints for the daily care form: cry count, peak time, motion band, intensity -
     derived from MongoDB `notifications` (cry alerts) and `sensor_data` for the diary day in `tz`.
     """
-    _decode_bearer_user_id(authorization)
+    user_id = _decode_bearer_user_id(authorization)
     local = _local_now(tz)
     ed = (entry_date or "").strip() or _today_iso(local)
     if not _DATE_RE.match(ed):
